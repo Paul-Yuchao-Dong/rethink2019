@@ -1,0 +1,35 @@
+---
+title: "Vizualize Priors"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(patchwork)
+```
+
+```{r}
+
+
+diff_nu <- ggplot(data = tibble(x = c(0, 200)), aes(x = x)) +
+  geom_area(stat = "function", fun = dexp, args = list(rate = 1/29), 
+            fill = "darkblue", color = "black") +
+  labs(x = expression(Normality ~ parameter ~ (nu)), y = "Density") +
+  annotate(geom = "label", x = 100, y = 0.009, label = "Exponential(1/29)") +
+  theme_minimal() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_blank())
+diff_nu
+```
+
+```{r}
+ggplot(data = tibble(x=c(0,100)))+
+  aes(x)+
+  geom_line(stat = "function", fun = dnorm, args = list(mean=50, 10)) -> diff_mu
+```
+
+```{r}
+diff_nu + diff_mu
+```
+

@@ -1,0 +1,67 @@
+---
+title: "Chapter10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(rethinking)
+```
+```{r}
+p <- 0.7 
+( A <- c( (1-p)^2 , p*(1-p) , (1-p)*p , p^2 ) )
+```
+
+```{r}
+A %*% c(0,1,1,2)
+```
+
+```{r}
+-sum(A*log(A))
+```
+```{r}
+library(zeallot)
+```
+
+```{r}
+sim.p <- function(G = 1.4){
+  c(x1,x2,x3) %<-% runif(3)
+
+# below code is to workout a probability distribution from three random numbers between 0 and 1, used SymPy to solve for p4
+# from sympy import *
+# 
+# k, x1, x2, x3, p4, G = symbols("k, x1, x2, x3, p4, G")
+# 
+# eq1 = k * x1 + k * x2 + k * x3 + p4 - 1
+# eq2 = k * x2 + k * x3 + 2 * p4 - G
+# 
+# solve([eq1, eq2], (p4, k))
+  
+  k <- (-G + 2)/(2*x1 + x2 + x3)
+  p4 <-  (G*x1 + G*x2 + G*x3 - x2 - x3)/(2*x1 + x2 + x3)
+  dist <- c(c(x1,x2,x3)*k,p4)
+  H <- -sum(dist * log(dist))
+  list(H, dist)
+}
+```
+
+```{r}
+H <- replicate(1e5, sim.p(1.4))
+```
+
+```{r}
+dens(as.numeric(H[1,]), adj=0.1)
+```
+
+```{r}
+entropies <- as.numeric(H[1,])
+distributions <- H[2,]
+```
+```{r}
+max(entropies)
+```
+```{r}
+distributions[ which.max(entropies) ]
+```
+

@@ -1,0 +1,53 @@
+---
+title: "random changepoint"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(brms)
+```
+
+```{r}
+df <- data.frame(
+  y = rnorm(330),
+  age = rep(0:10, 30),
+  person = rep(1:30, each = 11)
+)
+```
+
+
+```{r}
+bform <- bf(
+  y ~ b0 + b1 * (age - omega) * step(omega - age) + 
+    b2 * (age - omega) * step(age - omega),
+  b0 + b1 + b2 + alpha ~ 1 + (1|person),
+  # to keep omega within the age range of 0 to 10
+  nlf(omega ~ inv_logit(alpha) * 10),
+  nl = TRUE
+)
+
+
+
+bprior <- prior(normal(0, 3), nlpar = "b0") +
+  prior(normal(0, 3), nlpar = "b1") +
+  prior(normal(0, 3), nlpar = "b2") +
+  prior(normal(0, 3), nlpar = "alpha")
+```
+
+
+```{r}
+make_stancode(bform, data = df, prior = bprior)
+
+```
+```{r}
+fit <- brm(bform, data = df, prior = bprior, chains = 1)
+```
+
+```{r}
+summary(fit)
+```
+```{r}
+parse_bf(bform )
+```
+

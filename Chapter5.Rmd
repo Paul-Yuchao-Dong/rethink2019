@@ -1,0 +1,238 @@
+---
+title: "Chapter5"
+output: notebook
+editor_options: 
+  chunk_output_type: console
+---
+# Data import
+```{r setup}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 5, fig.height = 5)
+# load data and copy 5.1
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+
+rm(WaffleDivorce)
+detach(package:rethinking, unload=T)
+library(tidyverse)
+library(brms)
+library(patchwork)
+library(plotly)
+# Data Munging
+
+d <- d %>% 
+  mutate(A = scale(MedianAgeMarriage)[,1],
+         D = scale(Divorce)[,1],
+         M = scale(Marriage)[,1]
+         )
+head(d)
+```
+```{r fig.height=5}
+d %>% 
+  ggplot(aes(WaffleHouses, Divorce)) + 
+  geom_point(shape = 1)+
+  geom_smooth(method = lm)
+```
+```{r fig.height=7}
+d %>% 
+  select(Marriage, A, D) %>% 
+  pairs(upper.panel=panel.smooth)
+```
+
+```{r}
+d %>% 
+  as.tibble() %>% 
+  select(Marriage) %>% 
+  ggpairs()
+```
+```{r}
+sd(d$MedianAgeMarriage)
+```
+```{r}
+b5.1 <- brm(
+  data = d, family = gaussian,
+  D ~ 1 + A,
+  prior = c(
+    prior(normal(0, 0.2), class = Intercept),
+    prior(normal(0, 0.5), class = b),
+    prior(exponential(1), class = sigma)
+  ),
+  sample_prior = "only"
+)
+```
+```{r}
+d %>% 
+  ggplot(aes(A, D)) + 
+  geom_point(shape=1)+
+  calc_intervals(d, b5.1) %>% plot_intervals(x = ~A)
+```
+```{r}
+b5.1post <- update(b5.1, sample_prior = "no")
+```
+
+```{r}
+d %>% 
+  ggplot(aes(A, D)) + 
+  geom_point(shape=1)+
+  calc_intervals(d, b5.1post) %>% plot_intervals(x = ~A)
+```
+
+```{r}
+print(b5.1post)
+```
+```{r}
+s_data_b5.1 <-  standata(b5.1post) 
+```
+```{r}
+stancode(b5.1post)
+```
+```{r}
+b5.3 <- brm(data = d, family = gaussian,
+            D ~ 1 + A + M,
+            prior = c(
+              prior(normal(0, 0.2), class = Intercept),
+              prior(normal(0, 0.5), class = b),
+              prior(exponential(1), class = sigma)
+            ),
+            sample_prior = "only"
+            )
+```
+```{r}
+d %>% head
+```
+```{r}
+b5.3post <- update(b5.3, sample_prior = "no")
+```
+
+```{r}
+
+stanplot(b5.3post) + stanplot(b5.3)
+```
+#Predictor residual plots
+## first get residual
+```{r}
+b5.4 <- brm(data = d, family = gaussian,
+            Marriage ~ 1 + MedianAgeMarriage
+            )
+```
+```{r}
+fitted_b5.4 <- 
+  fitted(b5.4) %>% 
+  as.tibble() %>% 
+  bind_cols(d)
+```
+```{r}
+fitted_b5.4 %>% 
+  ggplot(aes(MedianAgeMarriage, Marriage))+
+  geom_point(shape = 1,size=2, color = "firebrick4")+
+  geom_segment(aes(xend = MedianAgeMarriage, yend = Estimate), size = 1/4)+
+  geom_line(aes(y=Estimate), color = "firebrick4")+
+  theme_bw()+
+  theme(panel.grid=element_blank())
+```
+
+
+
+```{r}
+res_d <- residuals(b5.4) %>% 
+  as.tibble() %>% 
+  bind_cols(d) 
+```
+```{r}
+names(res_d)
+```
+
+```{r}
+text <-
+  tibble(Estimate = c(- 1, 1),
+         Divorce = 14.1,
+         label = c("slower", "faster"))
+
+res_d %>% 
+  ggplot(aes(Estimate, Divorce))+
+  stat_smooth(method = "lm", alpha = 1/5, size=1/2, fullrange = T, fill = "firebrick4")+
+  geom_point(shape = 1, size = 2, color = "firebrick4", alpha = 2/3)+
+  geom_text(data = text, aes(label = label))+
+  theme_bw()+
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+seq_range(d$MedianAgeMarriage, length.out = 10)
+```
+```{r}
+nd <- tibble(M = seq_range(d$M, length.out = 20),
+             A = mean(d$A)
+             ) 
+
+p <- d %>% 
+  as.tibble() %>% 
+  mutate(Location = as.character(Location)) %>%
+  ggplot(aes(label = Location))+
+  geom_point(aes(M, D)) +
+  calc_intervals(nd, b5.3post) %>% plot_intervals(~M)
+
+```
+```{r}
+ggplotly(p)
+```
+```{r}
+nd <- tibble(A = seq_range(d$A, length.out = 20),
+             M = mean(d$M)
+             ) 
+
+p <- d %>% 
+  as.tibble() %>% 
+  mutate(Location = as.character(Location)) %>%
+  ggplot(aes(label = Location))+
+  geom_point(aes(A, D)) +
+  calc_intervals(nd, b5.3post) %>% plot_intervals(~A)
+  
+```
+```{r}
+ggplotly(p)
+```
+```{r}
+brms::pp_check(b5.3post, type = "loo_pit")
+
+```
+```{r}
+library(bayesplot)
+```
+```{r}
+
+ppc_scatter(d$D, predict(b5.3post, summary = F)[1:5,])
+```
+```{r}
+```
+
+```{r}
+PP_Q_plot(fitted(b5.3post))
+```
+```{r}
+b5.3post %>% predict %>% PP_Q_plot %>% ggplotly(label = ~Location)
+```
+# 5.2 masked relationship
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+rm(milk)
+detach(package:rethinking, unload = T)
+library(brms)
+```
+```{r}
+library(feather)
+write_feather(d, "d.feather")
+```
+
+
+```{r}
+DataExplorer::create_report(d)
+```
+```{r}
+d %>% 
+  select(kcal.per.g, mass, neocortex.perc) %>% 
+  pairs()
+```
+

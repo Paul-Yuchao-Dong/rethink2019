@@ -1,0 +1,54 @@
+---
+title: "Ch11Poisson_offset"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+```
+
+```{r}
+num_days <- 30
+y <- rpois(num_days, 1.5)
+```
+
+```{r}
+num_weeks <- 4
+y_new <- rpois(num_weeks, 4*1.5)
+```
+
+```{r}
+d <- tibble(
+  monastery = c(rep(0, num_days), rep(1, num_weeks))
+) %>% 
+  mutate(
+    days = 1 + 6 * monastery,
+    rate = 1.5 + 3 * monastery,
+    y = rpois(num_days + num_weeks, rate),
+    log_days = log(days)
+  )
+```
+```{r}
+m11.12 <- quap(
+  alist(
+    y ~ dpois(lambda),
+    log(lambda) <-  a + b * monastery + log_days,
+    a ~ dnorm(0, 0.2),
+    b ~ dnorm(0, 1)
+  ), data = d
+)
+```
+```{r}
+precis(m11.12) %>% exp
+```
+
+```{r}
+post <- extract.samples(m11.12)
+mon0 <- post$a %>% exp
+mon1 <- (post$a + post$b) %>% exp
+
+data.frame(mon0, mon1) %>% precis
+```
+

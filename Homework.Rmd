@@ -1,0 +1,117 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Week 1 homework
+
+## 1 Grid approximation
+
+flat prior 8 water in 15 toss
+```{r}
+prior <- seq(from=0, to=1, length.out = 1000) # I shouldn't think this is the prior, in fact this is the probability grid
+```
+```{r}
+likelyhood <- function(probability){
+  dbinom(8, size = 15, prob = probability)
+}
+```
+```{r}
+posterior <- likelyhood(prior)
+```
+```{r}
+posterior <- posterior / sum(posterior)
+```
+### here I think I missed the part where I shouldn't sample from the posterior, the posterior is just a probability function
+```{r}
+plot(prior,posterior, type="l")
+```
+## the answer have some additional steps
+```{r}
+p_grid <- seq(0, 1, length.out = 1000)
+prior  <- rep(1, 1000)
+likelyhoods <- likelyhood(p_grid)
+posterior <- prior * likelyhoods
+posterior <- posterior / sum(posterior)
+samples1 <- sample(p_grid, size= 1e4, replace=T, prob = posterior)
+```
+```{r}
+plot(density(samples1))
+```
+```{r}
+summary(samples)
+```
+## 2 replace flat prior with a conviction that the earth's surface is mostly covered by water
+```{r}
+p_grid <- seq(0, 1, length.out = 1000)
+prior <- c(rep(0, 500), rep(1, 500))
+prior <- prior / sum(prior)
+likelihoods <- likelyhood(p_grid)
+posterior <- prior * likelihoods
+posterior <- posterior / sum(posterior)
+samples2 <- sample(p_grid, 1e4, replace = T, prob = posterior)
+
+plot(density(samples1))
+abline(v=0.7)
+plot(density(samples2))
+abline(v=0.7)
+
+```
+```{r}
+quantile(samples1, c(.95, .995))
+quantile(samples2, c(.95, .995))
+```
+```{r}
+library(rethinking)
+```
+```{r}
+dens(samples1, xlab = "p", xlim=c(0,1), ylim=c(0,6), show.HPDI = T)
+dens(samples2, add = T, lty=2, show.HPDI = T)
+abline(v=0.7)
+```
+
+## 3 Power of sample numbers
+Build functions step-by-step
+observed data generation, with p = 0.7
+```{r}
+observed <- function(trials){
+  rbinom(1, size = trials, prob = 0.7)
+}
+```
+
+```{r}
+
+likelihood <- function(p, observed_data, trials){
+  dbinom(observed_data, trials, prob = p)
+}
+
+```
+
+
+```{r}
+trial = 32
+
+p_grad <- seq(0,1, length.out = 1000)
+
+prior <- c(rep(0, 500), rep(1,500))
+prior <- prior / sum(prior)
+observed_data <- observed(trial)
+
+likelihoods <- likelihood(p_grad, observed_data, trial)
+
+posterior <- prior * likelihoods
+
+posterior <- posterior / sum(posterior)
+
+samples = sample(p_grad, 1e4, replace = T, prob = posterior)
+
+
+```
+
+
+test the overall data generation
+```{r}
+lapply(2^(0:3), observed)
+```
+
+

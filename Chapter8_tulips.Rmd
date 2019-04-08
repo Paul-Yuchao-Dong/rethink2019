@@ -1,0 +1,92 @@
+---
+title: "Chapter8_tulips"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+
+data("tulips")
+
+d <- tulips
+```
+```{r}
+DataExplorer::create_report(d)
+```
+```{r}
+str(d)
+```
+
+```{r}
+d$blooms_std <- d$blooms / max(d$blooms)
+d$water_cent <- d$water - mean(d$water)
+d$shade_cent <- d$shade - mean(d$shade)
+```
+
+```{r}
+a <- rnorm(1e4, 0.5, 0.25)
+mean(a<0 | a>1)
+```
+Simpler model with both predictors
+```{r}
+m8.6 <- quap(
+  alist(
+    blooms_std ~ dnorm(mu, sigma),
+    mu <- a + b_w * water_cent + b_s * shade_cent,
+    a ~ dnorm(0.5, 0.25),
+    b_w ~ dnorm(0, 0.25),
+    b_s ~ dnorm(0, 0.25),
+    sigma ~ dexp(1)
+  ), data = d
+)
+```
+Interaction model 
+```{r}
+m8.7 <- quap(
+  alist(
+    blooms_std ~ dnorm(mu, sigma),
+    mu <- a + b_w * water_cent + b_s * shade_cent + b_w_s * water_cent * shade_cent,
+    a ~ dnorm(0.5, 0.25),
+    b_w ~ dnorm(0, 0.25),
+    b_s ~ dnorm(0, 0.25),
+    b_w_s ~ dnorm(0, 0.25),
+    sigma ~ dexp(1)
+  ), data = d
+)
+```
+
+m8.6 vs m8.7 in triptych!
+```{r}
+par(mfrow=c(2,3))
+for (model in c(m8.6, m8.7)){
+  
+  for (s in -1:1){
+    idx <- which(d$shade_cent==s)
+    plot(d$water_cent[idx], d$blooms_std[idx], xlab="water", ylab = "bloom", pch=16, col=rangi2, ylim=c(0,1))
+    mu <- link(model, data = data.frame(shade_cent=s, water_cent=-1:1))
+    for (i in 1:20) lines(-1:1, mu[i,], col=col.alpha("black"))
+    mtext(paste("Shade = ", s))
+  }
+}
+```
+
+```{r}
+compare(m8.6, m8.7)
+```
+
+```{r}
+par(mfrow=c(2,3))
+for (model in c(m8.6, m8.7)){
+  
+  for (s in -1:1){
+    idx <- which(d$shade_cent==s)
+    plot(d$water_cent[idx], d$blooms_std[idx], xlab="water", ylab = "bloom", pch=16, col=rangi2, ylim=c(0,1))
+    prior <- extract.prior(model)
+    mu <- link(model, data = data.frame(shade_cent=s, water_cent=-1:1), post=prior)
+    for (i in 1:20) lines(-1:1, mu[i,], col=col.alpha("black"))
+    mtext(paste("Shade = ", s))
+  }
+}
+```
+

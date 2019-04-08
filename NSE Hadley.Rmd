@@ -1,0 +1,63 @@
+---
+title: "NSE Hadley"
+output: html_notebook
+---
+
+```{r}
+f <- ~ x + y + z
+```
+```{r}
+typeof(f)
+attributes(f)
+```
+```{r}
+as.character(f[2])
+```
+```{r}
+library(lazyeval)
+```
+
+```{r}
+f_env(f)
+```
+```{r}
+f_eval(f, list(x=2,y=3,z=4))
+```
+```{r}
+x <- 1
+
+add_100 <- function(x){
+  ~ 100 + x
+}
+
+f_eval(add_100(3))
+```
+# unquoting
+```{r}
+variable <- ~ cyl *0.2
+f_interp(~mean(uq(variable)))
+```
+```{r}
+f_eval(~mean(uq(variable)), mtcars)
+```
+```{r}
+mean(mtcars$cyl)*.2
+```
+```{r}
+variable <- ~x
+extra_args <- list(na.rm = T, trim = 0.9)
+f_interp(~mean(uq(variable), uqs(extra_args)))
+```
+```{r}
+point_plot <- function(formula, data){
+  ggplot(data) + 
+    geom_point(aes_(x = formula[[3]], y = formula[[2]]))
+}
+```
+```{r}
+point_plot(mpg~cyl, mtcars)
+```
+```{r}
+head(mtcars)
+```
+

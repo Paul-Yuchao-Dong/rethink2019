@@ -1,0 +1,240 @@
+---
+title: "tidybayes_draw"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(magrittr)
+library(dplyr)
+library(purrr)
+library(forcats)
+library(tidyr)
+library(modelr)
+library(tidybayes)
+library(ggplot2)
+library(ggstance)
+library(ggridges)
+library(cowplot)
+library(rstan)
+library(brms)
+library(ggrepel)
+library(RColorBrewer)
+library(gganimate)
+
+theme_set(theme_tidybayes() + panel_border() + background_grid())
+
+```
+```{r}
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+```
+
+```{r}
+set.seed(5)
+n = 10
+n_condition = 5
+ABC =
+  tibble(
+    condition = rep(c("A","B","C","D","E"), n),
+    response = rnorm(n * 5, c(0,1,2,1,-1), 0.5)
+  )
+```
+
+```{r}
+ABC %>% 
+  ggplot(aes(response, condition))+
+  geom_point()
+```
+```{r}
+get_prior(data = ABC, family = gaussian,
+          response ~ (1|condition) )
+```
+```{r}
+get_prior(data = ABC, family = gaussian,
+    response ~ (1 | condition))
+```
+
+
+```{r}
+m <- brm(data = ABC, family = gaussian,
+    response ~ (1 | condition),
+    prior = c(
+      prior(normal(0,1), class = Intercept),
+      prior(student_t(3,0,1), class = sd),
+      prior(student_t(3,0,1), class = sigma)
+    )
+    )
+```
+```{r}
+summary(m)
+```
+```{r}
+stancode(m)
+```
+```{r}
+get_variables(m)
+```
+```{r}
+m %>% 
+  spread_draws(r_condition[condition, term]) %>% 
+  head(10)
+```
+
+```{r}
+m %>% 
+  spread_draws(r_condition[c,t]) %>% 
+  head(10)
+```
+
+```{r}
+m %>% 
+  spread_draws(r_condition[c,]) %>% 
+  head()
+```
+
+```{r}
+m %>% 
+  spread_draws(b_Intercept, sigma) %>% 
+  head()
+```
+```{r}
+options(precision=3)
+m %>% 
+  spread_draws(b_Intercept, sigma) %>% 
+  median_qi() 
+```
+```{r}
+m %>% 
+  gather_draws(b_Intercept, sigma) %>% 
+  median_qi
+```
+```{r}
+m %>% 
+  spread_draws(r_condition[condition,], b_Intercept) %>% 
+  median_qi
+```
+```{r}
+m %>% 
+  spread_draws(b_Intercept, r_condition[condition,]) %>% 
+  mutate(condition_mean = b_Intercept + r_condition) %>% 
+  median_qi(condition_mean)
+```
+```{r}
+m %>% 
+  spread_draws(b_Intercept, r_condition[condition,]) %>% 
+  median_qi(condition_mean = b_Intercept + r_condition) %>% 
+  ggplot(aes(y = condition, x = condition_mean, xmax = .upper, xmin = .lower))+
+  geom_pointrangeh()
+```
+```{r}
+m %>% 
+  spread_draws(b_Intercept, r_condition[condition,]) %>% 
+  median_qi(conditional_mean = b_Intercept + r_condition, .width = c(.95,.8,.5))
+```
+```{r}
+m %>% 
+  spread_draws(b_Intercept, r_condition[condition,]) %>% 
+  median_hdi(conditional_mean = b_Intercept + r_condition, .width = c(.95,.66)) %>% 
+  ggplot(aes(conditional_mean, condition))+
+  geom_pointintervalh()
+```
+
+```{r}
+m %>% 
+  spread_draws(b_Intercept, r_condition[condition,]) %>% 
+  mutate(conditional_mean = b_Intercept + r_condition) %>% 
+  ggplot(aes(conditional_mean, condition))+
+  geom_halfeyeh()
+```
+```{r}
+ABC %>% 
+  data_grid(condition) %>% 
+  add_fitted_draws(m) %>% 
+  head
+```
+
+```{r}
+(ABC %>% 
+  data_grid(condition) %>% 
+  add_fitted_draws(m) %>% 
+  ggplot(aes(.value, condition))+
+  stat_pointintervalh(.width = c(.66,.95))) 
+```
+```{r}
+ABC %>% 
+  data_grid(condition) %>% 
+  add_fitted_draws(m) %>% 
+  do(tibble(.value = quantile(.$.value, ppoints(100)))) %>% 
+  ggplot(aes(.value))+
+  geom_dotplot(binwidth = .04)+
+  facet_grid(condition ~.)+
+  scale_y_continuous(breaks = NULL)
+```
+```{r}
+ABC %>% 
+  data_grid(condition) %>% 
+  add_predicted_draws(m) %>% 
+  ggplot(aes(.prediction, condition))+
+  geom_density_ridges()
+```
+```{r}
+ABC %>% 
+  data_grid(condition) %>% 
+  add_predicted_draws(m) %>% 
+  ggplot(aes(.prediction, condition))+
+  stat_intervalh(.width = c(0.5,.8,.95,.99))+
+  geom_point(aes(response), data=ABC)+
+  scale_color_brewer()
+```
+
+```{r}
+grid <- ABC %>% 
+  data_grid(condition)
+
+fits <- grid %>% 
+  add_fitted_draws(m)
+
+preds <- grid %>% 
+  add_predicted_draws(m)
+
+ABC %>% 
+  ggplot(aes(response, condition))+
+  stat_intervalh(data = preds, aes(.prediction))+
+  stat_pointintervalh(aes(.value), data = fits, .width = c(.66,.95), position = position_nudge(y=-0.2))+
+  geom_point()+
+  scale_color_brewer()
+```
+```{r}
+ABC %>% 
+  data_grid(condition) %>% 
+  add_fitted_draws(m, dpar =c("mu", "sigma"), n=100) %>% 
+  mutate(
+    lower = qnorm(.001, mu, sigma),
+    upper = qnorm(.999, mu, sigma),
+    response = map2(lower, upper, seq, length.out = 100),
+    density = pmap(list(response, mu, sigma), dnorm)
+  ) %>% 
+  unnest() %>% 
+  ggplot(aes(response, condition))+
+  geom_ridgeline(aes(height = density, group = interaction(condition,.draw)), fill = NA, color = adjustcolor("black", alpha.f = 1/20))+
+  geom_point(data = ABC, shape=21, fill = "blue", size = 2)
+```
+```{r}
+m_mpg = brm(mpg~hp*cyl, data = mtcars)
+summary(m_mpg)
+```
+```{r}
+get_variables(m_mpg)
+```
+```{r}
+stancode(m_mpg)
+```
+
+```{r}
+mtcars %>% 
+  group_by(cyl) %>% 
+  data_grid(hp = seq_range(hp, n=51))
+```
+

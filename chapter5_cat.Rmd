@@ -1,0 +1,38 @@
+---
+title: "chapter5_cat"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 5, fig.height = 5)
+library(rethinking)
+data(Howell1)
+d <- Howell1
+rm(Howell1)
+detach(package:rethinking, unload = T)
+library(brms)
+library(tidyverse)
+library(patchwork)
+```
+```{r munging}
+DataExplorer::create_report(d)
+```
+```{r}
+b5.8 <- brm(
+  data = d, family = gaussian,
+  height ~ 1 + male,
+  prior = c(prior(normal(178, 20), class = b),
+            prior(exponential(1), class = sigma)
+            )
+)
+```
+```{r}
+stanplot(b5.8)
+```
+```{r}
+  print(b5.8)
+```
+
+

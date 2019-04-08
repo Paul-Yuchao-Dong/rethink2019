@@ -1,0 +1,111 @@
+---
+title: "Chapter5_2"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 5, fig.height = 5)
+library(rethinking)
+data(milk)
+d <- milk
+rm(milk)
+detach(package:rethinking, unload = T)
+library(brms)
+library(tidyverse)
+library(patchwork)
+```
+```{r munging}
+d$K <- scale(d$kcal.per.g)[,1]
+d$M <- scale(log(d$mass))[,1]
+d$N <- scale(d$neocortex.perc)[,1]
+dcc <- d[complete.cases(d),]
+```
+
+```{r cars}
+DataExplorer::create_report(d)
+```
+```{r}
+d %>% 
+  select(kcal.per.g, mass, neocortex.perc) %>% 
+  pairs(panel = function(x,y){
+    points(x,y)
+    abline(lm(y~x), col = "firebrick4")
+  })
+```
+
+```{r}
+b5.5 <- brm(data =d, family = gaussian,
+            K ~ 1 + N,
+            prior = c(
+              prior(normal(0, 1), class = Intercept),
+              prior(normal(0,1), class = b),
+              prior(exponential(1), class = sigma)
+            ), sample_prior = "only"
+            )
+```
+```{r}
+print(b5.5)
+```
+
+```{r}
+
+predict(b5.5) %>% PP_Q_plot(dcc, ~K, lbl = ~species)
+```
+```{r}
+b5.5post <- update(b5.5, sample_prior="no")
+```
+```{r}
+predict(b5.5post) %>% PP_Q_plot(dcc, ~K, lbl = ~species)
+```
+
+
+```{r}
+slope_plot(b5.5post, 200) + slope_plot(b5.5, 200)
+```
+
+```{r}
+b5.5_narrow <- brm(data =d, family = gaussian,
+            K ~ 1 + N,
+            prior = c(
+              prior(normal(0, 0.2), class = Intercept),
+              prior(normal(0, 0.5), class = b),
+              prior(exponential(1), class = sigma)
+            ), sample_prior = "only"
+            )
+```
+```{r}
+slope_plot(b5.5) + slope_plot(b5.5_narrow)
+```
+```{r}
+b5.5_narrow_post <- update(b5.5_narrow, sample_prior = "no")
+```
+```{r}
+fixef(b5.5_narrow_post)
+fixef(b5.5post)
+```
+```{r}
+b5.6 <- update(b5.5post, formula = K ~ 1 + M, newdata = dcc)
+b5.6_narrow <- update(b5.5_narrow_post, formula = K ~ 1 + M, newdata = dcc)
+```
+```{r}
+fixef(b5.6)
+fixef(b5.6_narrow)
+
+```
+
+```{r}
+b5.7 <- update(b5.5post, formula = K ~ 1 + M + N, newdata = dcc)
+b5.7_narrow <- update(b5.5_narrow_post, formula = K ~ 1 + M + N, newdata = dcc)
+```
+
+```{r}
+
+fixef(b5.7)
+fixef(b5.7_narrow)
+```
+
+
+
+

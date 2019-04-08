@@ -1,0 +1,178 @@
+---
+title: "James Stein Estimator"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+baseball <- 
+  tibble(player = c("Clemente", "F Robinson", "F Howard", "Johnstone", "Berry", "Spencer", "Kessinger", "L Alvarado", "Santo", "Swoboda", "Unser", "Williams", "Scott", "Petrocelli", "E Rodriguez", "Campaneris", "Munson", "Alvis"),
+         hits = c(18:15, 14, 14:12, 11, 11, rep(10, times = 5), 9:7),
+         times_at_bat = 45,
+         true_ba = c(.346, .298, .276, .222, .273, .27, .263, .21, .269, .23, .264, .256, .303, .264, .226, .286, .316, .2))
+```
+```{r}
+glimpse(baseball)
+```
+```{r}
+navy_blue <- "#0C2C56"
+nw_green  <- "#005C5C"  
+silver    <- "#C4CED4"
+theme_set(theme_grey()+
+            theme(panel.grid = element_blank(),
+                  panel.background = element_rect(fill = silver),
+                  strip.background = element_rect(fill = silver)
+                  )
+          )
+```
+```{r}
+baseball %>% 
+  ggplot(aes(hits))+
+  geom_histogram(binwidth = 1, size=1/10)+
+  scale_x_continuous("hits during the first 45 trials", breaks = 7:18)
+```
+```{r}
+library(tidybayes)
+
+baseball %>% 
+  ggplot(aes(true_ba, y=0))+
+  geom_halfeyeh(point_range=median_qi, .width = .5, color = navy_blue, fill = alpha(nw_green, 2/3))+
+  geom_rug()
+```
+```{r}
+(
+  baseball <- baseball %>% 
+    mutate( y = hits/ times_at_bat) %>% 
+    mutate( y_bar = mean(y),
+            c= .212
+            ) %>% 
+    mutate(z = y_bar + c * (y-y_bar),
+           theta = true_ba
+           )
+)
+```
+
+```{r}
+baseball %>% 
+  select(y,z) %>% 
+  gather() %>% 
+  mutate(label = ifelse(
+    key == "z",
+    "the James-Stein Estimator",
+    "early-season batting average"
+  )) %>% 
+  
+  ggplot(aes(value, label))+
+  geom_halfeyeh(point_range = median_qi, relative_scale = 4, .width = .5)+
+  geom_vline(xintercept = 0.2654321, linetype = 2)+
+  labs(x = "batting avg", y= NULL)+
+  coord_cartesian(ylim = c(1.25, 5.25))
+  
+```
+```{r}
+baseball <- baseball %>% 
+  mutate(y_error = theta - y,
+         z_error = theta -z)
+```
+
+```{r}
+baseball %>% 
+  select(y_error, z_error) %>% 
+  gather() %>% 
+  
+  ggplot(aes(value, key))+
+  geom_halfeyeh(point_interval = median_qi)+
+  geom_vline(xintercept = 0, linetype =2)
+```
+```{r}
+dim(baseball)
+```
+
+```{r}
+baseball %>% 
+  select(player, theta) %>% 
+  rename(value = theta) %>% 
+  mutate(key = "theta",
+         time = "theta") %>% 
+  dim
+```
+
+
+```{r}
+baseball %>% 
+  select(y,z,theta,player) %>% 
+  gather(key, value, -player) %>% 
+  mutate(time = ifelse(key=="theta", "theta", "estimate"),
+         freq = ifelse(key=="theta", 2, 1)
+         ) %>% 
+  uncount(freq) %>% 
+  mutate(facet = rep(c("est = y", "est = z"), each = n()/4) %>% rep(., times = 2)) %>% 
+  # View()
+  ggplot(aes(time, value, group=player))+
+  facet_wrap(~facet)+
+  geom_point()+
+  geom_line()
+```
+```{r}
+library(brms)
+```
+```{r}
+glimpse(baseball)
+```
+
+```{r}
+fit_y <- brm(data = baseball, family = binomial,
+              hits | trials(45) ~ 0 + player,
+              prior(normal(0,1.5), class = b),
+              seed = 1
+              )
+```
+```{r}
+fit_y_prior <- update(fit_y, sample_prior = "only")
+```
+```{r}
+predict(fit_y_prior, summary = F) %>% glimpse()
+```
+
+```{r}
+predict(fit_y_prior) %>% prediction_observed_plot(baseball, ~hits, lbl = ~player)
+```
+```{r}
+predict(fit_y) %>% prediction_observed_plot(baseball, ~hits, lbl = ~player)
+```
+```{r}
+fit_y$fit
+```
+
+```{r}
+fixef(fit_y)["playerERodriguez",] %>% inv_logit_scaled()
+```
+```{r}
+baseball %>% 
+  filter(str_detect(player,"E Rod"))
+```
+
+```{r}
+fit_z <-
+  brm(data = baseball, family = binomial,
+      hits | trials(45) ~ 1 + (1 | player),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 1.5), class = sd)),
+      seed = 1)
+
+
+# fit_z <- brm(data=baseball, family = binomial,
+#              hits | trials(45) ~ 1 + (1|player),
+#              prior = c(
+#                  prior(normal(0, 1.5), class = Intercept),
+#                  prior(normal(0, 1.5), class = sd)
+#                ),
+#              seed = 1
+#              )
+```
+```{r}
+predict(fit_z) %>% prediction_observed_plot(baseball, ~hits, lbl = ~player) %>% plotly::ggplotly()
+```
+

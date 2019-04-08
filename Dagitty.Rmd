@@ -1,0 +1,28 @@
+---
+title: "Dagitty"
+output: html_notebook
+---
+
+
+```{r setup}
+library(dagitty)
+```
+```{r}
+plant_dag <- dagitty(
+  "dag{
+    H0 -> H1
+    F -> H1
+    T->F
+  }"
+)
+coordinates(plant_dag) <- list(
+  x = c(H0=0, T=2, F=1.5, H1 = 1),
+  y = c(H0=0, T=0, F= 1, H1 = 2)
+)
+plot(plant_dag)
+```
+```{r}
+impliedConditionalIndependencies(plant_dag)
+impliedCovarianceMatrix(plant_dag) %>% heatmap(scale = "column")
+```
+

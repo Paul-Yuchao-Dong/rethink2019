@@ -1,0 +1,90 @@
+---
+title: "Chapter7 Primates"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(rethinking)
+data(Primates301)
+d <- Primates301
+```
+
+```{r}
+d$log_L <- d$longevity %>% log %>% scale %>% as.numeric
+d$log_B <- d$brain%>% log %>% scale %>% as.numeric
+d$log_M <- d$body%>% log %>% scale %>% as.numeric
+```
+
+```{r}
+d2 <- d[ complete.cases(d$log_B, d$log_L, d$log_M), ]
+dim(d2)
+```
+```{r}
+m7.8 <- quap(
+  alist(
+    log_L ~ dnorm(mu, sigma),
+    mu <- a + b_b * log_B + b_m * log_M,
+    a ~ dnorm(0,0.1),
+    b_b ~ dnorm(0,0.5),
+    b_m ~ dnorm(0,0.5),
+    sigma ~ dexp(1)
+  ),
+  data = d2
+)
+```
+```{r}
+m7.9 <- quap(
+  alist(
+    log_L ~ dnorm(mu, sigma),
+    mu <- a + b_b * log_B,
+    a ~ dnorm(0,0.1),
+    b_b ~ dnorm(0,0.5),
+    sigma ~ dexp(1)
+  ),
+  data = d2
+)
+```
+```{r}
+m7.10 <- quap(
+  alist(
+    log_L ~ dnorm(mu, sigma),
+    mu <- a + b_m * log_M,
+    a ~ dnorm(0,0.1),
+    b_m ~ dnorm(0,0.5),
+    sigma ~ dexp(1)
+  ),
+  data = d2
+)
+```
+```{r}
+# set.seed(301)
+compare(m7.8, m7.9, m7.10) 
+```
+
+```{r}
+coeftab( m7.8 , m7.9 , m7.10 )
+```
+```{r}
+cor(d2$log_B, d2$log_M)
+```
+```{r}
+waic_m7.8 <- WAIC( m7.8, pointwise = T)
+waic_m7.9 <- WAIC( m7.9, pointwise = T)
+```
+
+```{r}
+x <- d2$log_B - d2$log_M
+x <- x - min(x)
+x <- x / max(x)
+
+plot( waic_m7.8 - waic_m7.9, d2$log_L,
+      xlab = "Pointwise diff in WAIC", ylab = "log longevity (std)", pch=21,
+      col = col.alpha("black",0.8), cex=1+x, lwd=2, bg=col.alpha(rangi2,0.4))
+abline(v=0, lty=2)
+abline(h=0, lty=2)
+
+
+```
+

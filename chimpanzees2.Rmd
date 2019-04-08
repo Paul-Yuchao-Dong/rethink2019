@@ -1,0 +1,145 @@
+---
+title: "chimpanzees"
+author: "paul"
+date: "2/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(mc.cores = parallel::detectCores())
+#rstan_options(auto_write = TRUE)
+library(magrittr)
+library(rethinking)
+data(chimpanzees)
+d <- chimpanzees
+d$treatment <- 1 + d$prosoc_left + 2 * d$condition
+
+dat_list <- list(
+  pulled_left = d$pulled_left,
+  # prosoc_left = d$prosoc_left, # see if this is tolerable
+  treatment = factor(d$treatment),
+  actor = factor(d$actor)
+)
+
+library(brms)
+```
+
+```{r}
+bf(
+  pulled_left | trials(1) ~ a + b, 
+  a ~ 0 + actor, 
+  b ~ 0 + treatment,
+  nl = TRUE
+) %>% get_prior(family = binomial, data = dat_list)
+```
+
+
+
+```{r}
+m11.4_brms <- brm(data = dat_list, family = binomial,
+              pulled_left | trials(1) ~ 0 + (1|treatment) + (1|actor),
+              prior = c(
+                prior(normal(0, 1.5), class = sd, coef = "Intercept", group = "actor"),
+                prior(normal(0, 0.5), class = sd, coef = "Intercept", group = "treatment")
+              )
+              )
+
+
+```
+
+```{r}
+get_prior( data = dat_list, family = binomial,
+              pulled_left | trials(1) ~ 0 + (1|treatment) + (1|actor))
+```
+
+```{r}
+ranef(m11.4_brms)
+```
+```{r}
+posterior_samples(m11.4_brms)
+```
+```{r}
+summary(m11.4_brms)
+```
+
+```{r}
+m11.4_data <- make_standata(data = dat_list, family = binomial,
+              pulled_left | trials(1) ~ 0 + (1|treatment) + (1|actor))
+```
+```{r}
+stancode(m11.4_brms)
+```
+$$
+\begin{eqnarray}
+\text{pulled_left}_i & \sim & \text{Binomial} (1, p_i) \\
+\text{logit} (p_i) & = & a_{actor[i]} + b_{treatment[i]}\\
+a_{actor[i]} & \sim & \text{Normal} (0, 1.5)\\
+b_{treatment[i]} & \sim & \text{Normal} (0, 0.5)
+\end{eqnarray}
+$$
+
+```{r}
+m11.4_brms2 <- brm(data = dat_list, family = binomial,
+            pulled_left | trials(1) ~ 0 + factor(treatment) + factor(actor),
+            prior = c(
+              prior(normal(0, 1.5), class = b, coef = "factoractor2"),
+              prior(normal(0, 1.5), class = b, coef = "factoractor3"),
+              prior(normal(0, 1.5), class = b, coef = "factoractor4"),
+              prior(normal(0, 1.5), class = b, coef = "factoractor5"),
+              prior(normal(0, 1.5), class = b, coef = "factoractor6"),
+              prior(normal(0, 1.5), class = b, coef = "factoractor7"),
+              prior(normal(0, 0.5), class = b, coef = "factortreatment1"),
+              prior(normal(0, 0.5), class = b, coef = "factortreatment2"),
+              prior(normal(0, 0.5), class = b, coef = "factortreatment3"),
+              prior(normal(0, 0.5), class = b, coef = "factortreatment4")
+            )
+            
+            )
+```
+
+```{r}
+summary(m11.4_brms2)
+```
+```{r}
+stancode(m11.4_brms2)
+```
+
+
+```{r}
+m11.4_brms3 <- brm(data = dat_list, family = binomial,
+            pulled_left | trials(1) ~  factor(treatment) + factor(actor),
+            prior = prior(normal(0, 1.5), class = b)
+            )
+```
+
+```{r}
+summary(m11.4_brms3)
+```
+```{r}
+fixef(m11.4_brms2) %>% round(2)
+```
+
+```{r}
+fixef(m11.4_brms3) %>% round(2) %>% dim
+```
+```{r}
+coef(m11.4_brms)
+```
+```{r}
+m11.4_brms4 <- brm(data = dat_list, family = binomial,
+            pulled_left | trials(1) ~  0 + factor(actor),
+            prior = prior(normal(0, 1.5), class = b)
+            )
+summary(m11.4_brms4)
+```
+
+```{r}
+get_prior(data = dat_list, family = binomial,
+            pulled_left | trials(1) ~  0 + factor(actor) + factor(treatment))
+```
+```{r}
+dat_list$treatment %>% unique()
+```
+
+

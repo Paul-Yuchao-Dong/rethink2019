@@ -1,0 +1,83 @@
+---
+title: "Marginal_effects"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+## Not run: 
+fit <- brm(count ~ log_Age_c + log_Base4_c * Trt + (1 | patient),
+           data = epilepsy, family = poisson()) 
+           
+## plot all marginal effects
+plot(marginal_effects(fit), ask = FALSE)
+```
+
+
+```{r}
+## change colours to grey scale
+me <- marginal_effects(fit, "log_Base4_c:Trt")
+plot(me, plot = FALSE)[[1]] + 
+  scale_color_grey() +
+  scale_fill_grey()
+```
+
+
+```{r}
+## only plot the marginal interaction effect of 'log_Base4_c:Trt'
+## for different values for 'log_Age_c'
+conditions <- data.frame(log_Age_c = c(-0.3, 0, 0.3))
+plot(marginal_effects(fit, effects = "log_Base4_c:Trt", 
+                      conditions = conditions))
+```
+
+
+```{r}
+## also incorporate random effects variance over patients
+## also add data points and a rug representation of predictor values
+plot(marginal_effects(fit, effects = "log_Base4_c:Trt", 
+                      conditions = conditions, re_formula = NULL), 
+     points = TRUE, rug = TRUE)
+```
+
+
+```{r}
+## change handling of two-way interactions
+int_conditions <- list(
+  log_Base4_c = setNames(c(-2, 1, 0), c("b", "c", "a"))
+)
+marginal_effects(fit, effects = "Trt:log_Base4_c",
+                 int_conditions = int_conditions)
+marginal_effects(fit, effects = "Trt:log_Base4_c",
+                 int_conditions = list(log_Base4_c = quantile))
+```
+
+
+```{r}
+## fit a model to illustrate how to plot 3-way interactions
+fit3way <- brm(count ~ log_Age_c * log_Base4_c * Trt, data = epilepsy)
+conditions <- make_conditions(fit3way, "log_Age_c")
+marginal_effects(
+  fit3way, "log_Base4_c:Trt", conditions = conditions
+)
+```
+
+
+```{r}
+## only include points close to the specified values of log_Age_c
+me <- marginal_effects(
+ fit3way, "log_Base4_c:Trt", conditions = conditions, 
+ select_points = 0.1
+)
+plot(me, points = TRUE)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

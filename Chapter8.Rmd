@@ -1,0 +1,203 @@
+---
+title: "Chapter8"
+output: 
+  html_document: 
+    fig_caption: yes
+    fig_width: 10
+    fig_height: 10
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+# options(fig.width=10, fig.height=10)
+options(device = Cairo::CairoWin)
+# options(res = 720, dpi=700)
+library(rethinking)
+data(rugged)
+d <- rugged
+
+```
+Make log version of response
+```{r}
+d$log_gdp = log(d$rgdppc_2000)
+```
+Filter out missing data
+```{r}
+dd <- d[complete.cases(d$rgdppc_2000),]
+```
+Rescale variables
+```{r}
+dd$log_gdp_std <- dd$log_gdp / mean(dd$log_gdp)
+dd$rugged_std <- dd$rugged / max(dd$rugged)
+```
+Split countries between Africa and Non-Africa
+```{r}
+d.A0 <- dd[dd$cont_africa == 0 , ]
+d.A1 <- dd[dd$cont_africa == 1 , ]
+```
+```{r}
+m8.1 <- quap(
+  alist(
+    log_gdp_std ~ dnorm(mu, sigma),
+    mu <- a + b * (rugged_std - 0.215),
+    a ~ dnorm(1, 0.1),
+    b ~ dnorm(0, 0.3),
+    sigma ~ dexp(1)
+  ), data = d.A1
+)
+```
+Look at prior predictions of m8.1
+```{r}
+prior <- extract.prior(m8.1)
+
+# set up the plot dimensions
+plot( NULL , xlim=c(0,1) , ylim=c(0.5,1.5) ,
+xlab="ruggedness" , ylab="log GDP" )
+
+abline( h=min(dd$log_gdp_std) , lty=2 )
+abline( h=max(dd$log_gdp_std) , lty=2 )
+
+# Draw 50 lines from the prior
+rugged_seq <- seq(-0.1, 1.1, length.out = 30)
+mu <- link(m8.1, post = prior, data = list(rugged_std = rugged_seq))
+for (i in 1:50) lines(rugged_seq, mu[i,], col = col.alpha("black", 0.3))
+```
+```{r}
+m8.2 <- quap(
+  alist(
+    log_gdp_std~dnorm(mu, sigma),
+    mu <- a + b * (rugged_std - 0.215),
+    a ~ dnorm(1, 0.1),
+    b ~ dnorm(0, 0.3),
+    sigma ~ dexp(1)
+  ), data = d.A0
+)
+```
+```{r}
+precis(m8.1)
+```
+
+```{r}
+precis(m8.2)
+```
+the first model to consider if add a new predictor
+```{r}
+m8.3 <- quap(
+  alist(
+    log_gdp_std~dnorm(mu, sigma),
+    mu <- a + b * (rugged_std - 0.215),
+    a ~ dnorm(1, 0.1),
+    b ~ dnorm(0, 0.3),
+    sigma ~ dexp(1)
+  ), data = dd
+)
+```
+
+```{r}
+dd$cid <- ifelse(dd$cont_africa==1, 1, 2)
+```
+second model use indexing
+```{r}
+m8.4 <- quap(
+  alist(
+    log_gdp_std~dnorm(mu, sigma),
+    mu <- a[cid] + b * (rugged_std - 0.215),
+    a[cid]~dnorm(1, 0.1),
+    b ~ dnorm(0, 0.3),
+    sigma ~ dexp(1)
+  ),data = dd
+)
+```
+```{r}
+compare(m8.3, m8.4)
+```
+
+```{r}
+precis(m8.4, depth = 2)
+```
+Posterier prediction plot of m8.4
+```{r}
+mu.A0 <- link(m8.4, data=data.frame(cid=2, rugged_std=rugged_seq))
+mu.A1 <- link(m8.4, data=data.frame(cid=1, rugged_std=rugged_seq))
+
+mu.A0.mean <- apply(mu.A0, 2, mean)
+mu.A0.ci <- apply(mu.A0, 2, HPDI, prob = 0.97)
+
+mu.A1.mean <- apply(mu.A1, 2, mean)
+mu.A1.ci <- apply(mu.A1, 2, HPDI, prob = 0.97)
+
+plot(dd$rugged_std, dd$log_gdp_std)
+lines(rugged_seq, mu.A0.mean, col = "red")
+lines(rugged_seq, mu.A1.mean, col = "blue")
+
+shade(mu.A0.ci, rugged_seq,  col = col.alpha("red"))
+shade(mu.A1.ci, rugged_seq,  col = col.alpha("blue"))
+
+
+```
+Varing slop model
+```{r}
+m8.5 <- quap(
+  alist(
+    log_gdp_std ~ dnorm( mu, sigma),
+    mu <- a[cid] + b[cid] * (rugged_std - 0.215),
+    a[cid] ~ dnorm(1, 0.1),
+    b[cid] ~ dnorm(0, 0.3),
+    sigma ~ dexp(1)
+  ), data = dd
+)
+```
+```{r}
+precis(m8.5, depth = 2)
+```
+
+```{r}
+mu.A0 <- link(m8.5, data=data.frame(cid=2, rugged_std=rugged_seq))
+mu.A1 <- link(m8.5, data=data.frame(cid=1, rugged_std=rugged_seq))
+
+mu.A0.mean <- apply(mu.A0, 2, mean)
+mu.A0.ci <- apply(mu.A0, 2, HPDI, prob = 0.97)
+
+mu.A1.mean <- apply(mu.A1, 2, mean)
+mu.A1.ci <- apply(mu.A1, 2, HPDI, prob = 0.97)
+
+plot(dd$rugged_std, dd$log_gdp_std)
+
+lines(rugged_seq, mu.A0.mean, col = "red")
+lines(rugged_seq, mu.A1.mean, col = "blue")
+
+shade(mu.A0.ci, rugged_seq,  col = col.alpha("red"))
+shade(mu.A1.ci, rugged_seq,  col = col.alpha("blue"))
+```
+
+```{r}
+compare(m8.5, m8.4, m8.3)
+
+```
+
+```{r}
+waic_list <- WAIC(m8.5, pointwise = T)
+```
+irrelevant staff, just to see if iteration is possible in base R
+```{r}
+for (i in c("ha", "lo")) print(i)
+```
+now to show the association of whether a country is in Africa conditioning on ruggedness
+```{r}
+muA <- link(m8.5, data = data.frame(cid=1, rugged_std=rugged_seq))
+muN <- link(m8.5, data = data.frame(cid=2, rugged_std=rugged_seq))
+
+delta <- muA - muN
+```
+
+
+```{r}
+delta.mean <- apply(delta, 2, mean)
+delta.CI <- apply(delta, 2, HPDI)
+
+plot(rugged_seq, delta.mean, type="l")
+shade(delta.CI, rugged_seq, col=col.alpha("black"))
+abline(h=0,lty =2)
+```
+

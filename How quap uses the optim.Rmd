@@ -1,0 +1,23 @@
+---
+title: "How quap uses the optim"
+output: html_notebook
+---
+
+```{r}
+d <- Howell1[Howell1$age>=18, ]
+```
+
+
+```{r}
+flist <- alist(
+  height ~ dnorm(mu, sigma),
+  mu <- weight * a + b,
+  a ~ dnorm(0, 50),
+  b ~ dnorm(0, 50),
+  sigma ~ dunif(0, 100)
+)
+```
+```{r}
+model4H1 <- quap(flist,data = d, verbose = T, debug = T)
+```
+

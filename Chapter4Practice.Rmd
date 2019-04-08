@@ -1,0 +1,199 @@
+---
+title: "Chapter 4 Practice"
+output: html_notebook
+---
+
+```{r setup}
+library(data.table)
+library(rethinking)
+```
+Medium.
+4M1. For the model definition below, simulate observed heights from the prior (not the posterior).
+yi  Normal(; )
+  Normal(0; 10)
+  Uniform(0; 10)
+```{r}
+mu_sim <- rnorm(1e3, 0, 10)
+sigma_sim <- runif(1e3, 0, 10)
+y_sim <- rnorm(1e4, mu_sim, sigma_sim)
+data_for_prior <- list(y=y_sim)
+```
+```{r}
+model_4M1 <- quap(
+  alist(
+    y ~ dnorm(mu, sigma),
+    mu ~ dnorm(0, 10),
+    sigma ~ dunif(0, 10)
+  ),
+  data = data.frame(y=rnorm(1e4))
+)
+```
+```{r}
+priors <- extract.prior(model_4M1)
+```
+
+
+4M2. Translate the model just above into a quap formula.
+```{r}
+flist4_2 <- alist(
+    y ~ dnorm(mu, sigma),
+    mu ~ dnorm(0, 10),
+    sigma ~ dunif(0, 10)
+  )
+
+```
+
+4M3. Translate the quap model formula below into a mathematical model definition.
+flist <- alist(
+y ~ dnorm( mu , sigma ),
+mu <- a + b*x,
+a ~ dnorm( 0 , 50 ),
+b ~ dunif( 0 , 10 ),
+sigma ~ dunif( 0 , 50 )
+)
+4M4. A sample of students is measured for height each year for 3 years. After the third year, you want
+to fit a linear regression predicting height using year as a predictor. Write down the mathematical
+model definition for this regression, using any variable names and priors you choose. Be prepared to
+defend your choice of priors.
+4M5. Now suppose I tell you that the average height in the first year was 120 cm and that every
+student got taller each year. Does this information lead you to change your choice of priors? How?
+4M6. Now suppose I tell you that the variance among heights for students of the same age is never
+more than 64cm. How does this lead you to revise your priors?
+
+4H1. The weights listed below were recorded in the !Kung census, but heights were not recorded for
+these individuals. Provide predicted heights and 89% intervals (either HPDI or PI) for each of these
+individuals. That is, fill in the table below, using model-based predictions.
+Individual weight expected height 89% interval
+1 46.95
+2 43.72
+3 64.78
+4 32.59
+5 54.63
+
+```{r}
+data("Howell1")
+d <- Howell1[Howell1$age>=18, ]
+```
+```{r}
+precis(d)
+```
+rescale the data
+```{r}
+d$weight.s <- scale(d$weight)
+```
+
+Prior Predictive Distribution
+
+```{r}
+flist <- alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + weight.s * b,
+  a ~ dnorm(154, 50),
+  b ~ dnorm(0, 10),
+  sigma ~ dunif(0, 10)
+)
+model4H1 <- quap(flist,data = d, verbose = T)
+
+priors <- extract.prior(model4H1)
+```
+```{r}
+precis(priors)
+```
+```{r}
+plot(height ~ weight.s, data = d)
+for (i in 1:200) abline(priors$a[i], priors$b[i])
+```
+```{r}
+posteriors <- extract.samples(model4H1)
+precis(posteriors)
+```
+```{r}
+plot(height ~ weight.s, data = d)
+for (i in 1:200) abline(a = posteriors$a[i], b = posteriors$b[i])
+```
+```{r}
+weights <- c(46.95, 43.72, 64.78, 32.59, 54.63)
+
+weights.s <- (weights - mean(d$weight)) / sd(d$weight)
+```
+```{r}
+predictions <- lapply(1:nrow(posteriors), function(i) rnorm(5, posteriors$a[i] + posteriors$b[i] * weights.s, posteriors$sigma[i]))
+predictions <- do.call(rbind, predictions)
+```
+```{r}
+class(predictions)
+predictions[1,]
+predictions[1,1]
+```
+```{r}
+apply(predictions, 2, HPDI)
+```
+
+```{r}
+predictions_sim <- sim(model4H1, data = list(weight.s=weights.s))
+```
+```{r}
+class(predictions_sim)
+predictions_sim[1,]
+predictions_sim[1,1]
+```
+```{r}
+table_output <- cbind(weights,t(apply(predictions_sim, 2, HPDI)))
+```
+```{r}
+as.data.frame(table_output)$`0.89|`
+```
+
+4H2. Select out all the rows in the Howell1 data with ages below 18 years of age. If you do it right,
+you should end up with a new data frame with 192 rows in it.
+(a) Fit a linear regression to these data, using quap. Present and interpret the estimates. For
+every 10 units of increase in weight, how much taller does the model predict a child gets?
+(b) Plot the raw data, with height on the vertical axis and weight on the horizontal axis. Superimpose
+the MAP regression line and 89% HPDI for the mean. Also superimpose the 89% HPDI for
+predicted heights.
+(c) What aspects of the model fit concern you? Describe the kinds of assumptions you would
+change, if any, to improve the model. You don’t have to write any new code. Just explain what the
+model appears to be doing a bad job of, and what you hypothesize would be a better model.
+```{r}
+d2 <- Howell1[Howell1$age<18,]
+```
+```{r}
+dim(d2)
+```
+```{r}
+precis(d2)
+```
+```{r}
+model4H2 <- quap(alist(
+  height ~ dnorm(mu, sigma),
+  mu <- a + b * weight,
+  a ~ dnorm(58, 5),
+  b ~ dnorm(2.7, 10),
+  sigma ~ dexp(1)
+  ), data = d2, start = list(a=58, b=2, sigma = 3)
+)
+```
+```{r}
+precis(model4H2)
+```
+```{r}
+weights <- d2$weight
+max_weight <- max(weights)
+min_weight <- min(weights)
+new_weights <- seq(min_weight, max_weight, length.out = 200)
+
+mu_link <- link(model4H2, data = list(weight = new_weights))
+```
+```{r}
+pred_sim <- sim(model4H2, data = list(weight = new_weights))
+```
+
+```{r}
+plot(height ~ weight, data = d2)
+shade(apply(mu_link, 2, HPDI), new_weights)
+shade(apply(pred_sim,2, HPDI), new_weights)
+```
+```{r}
+dim(apply(mu_link, 2, HPDI))
+```
+

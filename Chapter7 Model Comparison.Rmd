@@ -1,0 +1,128 @@
+---
+title: "Chapter7 Model Comparison"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+```
+```{r}
+sppnames <- c( "afarensis","africanus","habilis","boisei",
+"rudolfensis","ergaster","sapiens")
+brainvolcc <- c( 438 , 452 , 612, 521, 752, 871, 1350 )
+masskg <- c( 37.0 , 35.5 , 34.5 , 41.5 , 55.5 , 61.0 , 53.5 )
+d <- data.frame( species=sppnames , brain=brainvolcc , mass=masskg )
+```
+
+```{r}
+d$mass_std <- scaler(d$mass, d$mass)
+d$brain_std <- d$brain / max(d$brain)
+```
+
+```{r}
+m7.1 <- quap(
+  alist(
+    brain_std ~ dnorm(mu, exp(log_sigma)),
+    mu <- a + b * mass_std,
+    a ~ dnorm(0.5, 1),
+    b ~ dnorm(0, 10),
+    log_sigma ~ dnorm(0,1)
+  ), 
+  data = d
+)
+```
+
+```{r}
+precis(m7.1)
+```
+```{r}
+set.seed(12)
+s <- sim(m7.1)
+r <- apply(s,2,mean)-d$brain_std
+resid_var <- var2(r)
+outcome_var <- var2(d$brain_std)
+1-resid_var / outcome_var
+
+```
+```{r}
+R2_bad <- function(model){
+  s <- sim(model, refresh=0)
+  r <- apply(s,2,mean)-d$brain_std
+  resid_var <- var2(r)
+  outcome_var <- var2(d$brain_std)
+  1-resid_var / outcome_var
+}
+
+```
+
+```{r}
+set.seed(1)
+lppd(m7.1, n=1e4)
+```
+```{r}
+set.seed(1)
+log_probs <- sim(m7.1, ll=T, n=1e4)
+nr <- nrow(log_probs)
+nc <- ncol(log_probs)
+f <- function(i) log_sum_exp(log_probs[,i]) - log(nr)
+lppd_ <- sapply(1:nc, f)
+```
+
+```{r}
+lppd_
+```
+WAIC calculations
+```{r}
+data(cars)
+m <- quap(
+  alist(
+    dist ~ dnorm(mu, sigma),
+    mu <- a + b * speed,
+    a ~ dnorm(0,10),
+    b ~ dnorm(0,10),
+    sigma ~ dexp(1)
+  ),
+  data = cars
+)
+```
+```{r}
+set.seed(94)
+post <- extract.samples(m, n=1e3)
+```
+```{r}
+n_samples <- 1e3
+logprob <- sapply(1:n_samples,
+                  function(s){
+                    mu <- post$a[s] + post$b[s] * cars$speed
+                    dnorm(cars$dist, mu, post$sigma[s], log=T)
+                  }
+                  )
+```
+```{r}
+dim(logprob)
+```
+
+```{r}
+n_cases <- length(cars$dist)
+lppd <- sapply(1:n_cases, function(i) log_sum_exp(logprob[i,]) - log(n_samples))
+```
+```{r}
+sum(lppd)
+```
+```{r}
+pWAIC <- sapply(1:n_cases, function(i) var(logprob[i,]))
+```
+
+```{r}
+-2*(sum(lppd) - sum(pWAIC))
+```
+
+```{r}
+WAIC(m)
+```
+```{r}
+waic_vec <- -2*(lppd-pWAIC)
+sqrt(var(waic_vec) * n_cases)
+```
+

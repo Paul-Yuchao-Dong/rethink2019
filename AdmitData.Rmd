@@ -1,0 +1,86 @@
+---
+title: "AdmitData"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+
+data("UCBadmit")
+d <- UCBadmit
+```
+
+# Binomial model
+```{r}
+m_binom <- quap(
+  alist(
+    admit ~ dbinom(applications, p),
+    logit(p) <- a,
+    a ~ dnorm(3, 0.5)
+  ),data = d
+)
+```
+```{r}
+precis(m_binom) %>% inv_logit()
+```
+# Poisson model
+```{r}
+d$rej <- d$reject
+m_pois <- quap(
+  alist(
+    admit ~ dpois(lambda1),
+    rej ~ dpois(lambda2),
+    log(lambda1) <- a1,
+    log(lambda2) <- a2,
+    a1 ~ dnorm(3, 2),
+    a2 ~ dnorm(3, 2)
+  ), data = d
+)
+```
+```{r}
+(m_pois) %>% coef %>% exp %>% sum
+```
+```{r}
+146.2086 / 377.0744
+```
+```{r}
+library(brms)
+```
+# Brms binomial
+```{r}
+get_prior(data = d, family = binomial,
+  admit ~ 1)
+```
+
+
+```{r}
+b_binom <- brm(
+  data = d, family = binomial,
+  admit | trials(applications) ~ 1,
+  prior = prior(normal(3,0.5), class = Intercept)
+)
+```
+```{r}
+fixef(b_binom) %>% inv_logit()
+```
+```{r}
+pp_check(b_binom)
+```
+
+
+```{r}
+get_prior(  data = d, family = poisson,
+  bf(cbind(admit, rej) ~ 1)
+)
+```
+
+```{r}
+b_pois <- brm(
+  data = d, family = poisson,
+  bf(cbind(admit, rej) ~ 1),
+  prior = prior(normal(3,2), class = Intercept)
+)
+```
+

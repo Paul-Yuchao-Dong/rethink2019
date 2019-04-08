@@ -1,0 +1,48 @@
+---
+title: "Chapter11Chimpanzees"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+data(chimpanzees)
+d <- chimpanzees
+detach(package:rethinking)
+rm(chimpanzees)
+
+library(tidyverse)
+library(brms)
+
+d <- d %>% 
+  mutate(treatment = 1 + prosoc_left + 2 * condition)
+dat_list <- with(d,
+                 list(
+                   pulled_left = pulled_left,
+                   treatment = as.integer(treatment),
+                   actor = as.integer(actor)
+                   )
+                 )
+```
+
+
+
+
+```{r}
+m11.4_brms <- brm(data = dat_list, family = bernoulli,
+            pulled_left ~ 0 + (1|treatment) + (1|actor),
+            prior = c(
+                prior(normal(0, 1.5), class = sd, coef = "Intercept", group = "actor"),
+                prior(normal(0, 0.5), class = sd, coef = "Intercept", group = "treatment")
+            ),chains = 1, iter = 100
+            )
+```
+
+```{r}
+stancode(m11.4_brms)
+```
+
+```{r}
+ranef(m11.4_brms)
+```
+
