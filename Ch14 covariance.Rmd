@@ -1,0 +1,85 @@
+---
+title: "Ch14 covariance"
+author: "paul"
+date: "3/30/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+```
+```{r}
+a <- 3.5
+b <- -1
+sigma_a <- 1
+sigma_b <- 0.5
+rho <- -0.7
+```
+```{r}
+Mu <- c(a,b)
+sigmas <- c(sigma_a, sigma_b)
+Rho <- matrix(c(1, rho, rho, 1), ncol = 2)
+
+Sigma <- diag(sigmas)%*% Rho %*%diag(sigmas)
+```
+```{r}
+set.seed(5)
+N_cafes <- 20
+vary_effects <- MASS::mvrnorm(N_cafes, Mu, Sigma)
+```
+
+```{r}
+a_cafe <- vary_effects[,1]
+b_cafe <- vary_effects[,2]
+```
+
+
+```{r}
+ggplot(vary_effects %>% data.frame, aes(X1, X2))+
+  geom_point()+
+  labs(x = "Intercepts (a_cafe)", y = "Slopes (b_cafe)")+
+  lapply(c(0.1, 0.3,.5,.8,.99), function(i) stat_ellipse(geom = "polygon", type = "norm", level = i, size = 0.3, alpha = 0.5, color = "black", fill = NA))
+  
+
+```
+```{r}
+N_visits <- 10
+sigma <- 0.5
+d <- vary_effects %>% 
+  as_tibble() %>% 
+  rename(a_cafe = V1, b_cafe = V2) %>% 
+  mutate(cafe = 1:n()) %>% 
+  expand(nesting(cafe, a_cafe, b_cafe), visits = 1:N_visits) %>% 
+  mutate(afternoon = rep(0:1, times=n()/2)) %>% 
+  mutate(mu = a_cafe + b_cafe * afternoon) %>% 
+  mutate(wait = rnorm(n(), mu, sigma))
+```
+```{r}
+dat <- with(d, list(
+  wait = wait,
+  cafe = cafe,
+  afternoon = afternoon
+))
+```
+```{r}
+m14.1 <- ulam(
+  alist(
+    wait ~ dnorm(mu, sigma),
+    mu <- a_cafe[cafe] + b_cafe[cafe]*afternoon,
+    c(a_cafe, b_cafe)[cafe] ~ multi_normal(c(a, b), Rho, sigma_cafe),
+    a ~ dnorm(5,2),
+    b ~ dnorm(-1, 0.5),
+    sigma_cafe ~ dexp(1),
+    sigma ~ dexp(1),
+    Rho ~ lkj_corr(2)
+  ),
+  data = dat, chains = 4, cores = 4
+)
+```
+```{r}
+post <- extract.samples(m14.1)
+dens(post$Rho[,1,2], adj = 0.1)
+```
+

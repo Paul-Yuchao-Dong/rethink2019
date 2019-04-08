@@ -1,0 +1,176 @@
+---
+title: "chapter 11UCBAdm"
+author: "paul"
+date: "2/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+data("UCBadmit")
+d <- UCBadmit
+d$gid <- ifelse(d$applicant.gender=="male", 1L,2L)
+dat <- with(d,
+            list(A = admit,
+                 N = applications,
+                 gid = gid
+                 ))
+```
+```{r}
+head(d)
+```
+```{r}
+m11.7 <- quap(
+  alist(
+    admit ~ dbinom(applications, p),
+    logit(p) <- a[gid],
+    a[gid] ~ dnorm(0, 1.5)
+  ),
+  data = d
+)
+```
+
+```{r}
+precis(m11.7, depth = 2)
+```
+```{r}
+post <- extract.samples(m11.7)
+diff_a <- post$a[,1]-post$a[,2]
+diff_p <- inv_logit(post$a[,1]) - inv_logit(post$a[,2])
+precis(list(diff_a=diff_a, diff_p=diff_p))
+```
+
+```{r}
+postcheck(m11.7)
+
+#draw lines and write dept names
+for (i in 1:6){
+  x <- 1 + 2 * (i-1)
+  y1 <- d$admit[x] / d$applications[x]
+  y2 <- d$admit[x+1] / d$applications[x+1]
+  lines(c(x, x+1), c(y1,y2),col=rangi2)
+  text(x+0.5, (y1+y2)/2+0.05, d$dept[x], cex=0.8,col=rangi2)
+}
+```
+```{r}
+d$dept_id <- rep(1:6, each = 2)
+m11.8 <- quap(
+  alist(
+    admit ~ dbinom(applications, p),
+    logit(p) <- a[gid] + b[dept_id],
+    a[gid] ~ dnorm(0, 1.5),
+    b[dept_id] ~ dnorm(0, 1.5)
+  ),
+  data = d
+)
+```
+```{r}
+precis(m11.8, depth = 2)
+```
+```{r}
+library(magrittr)
+```
+
+```{r}
+post <- extract.samples(m11.8)
+list(
+  diff_a = post$a[,1] - post$a[,2],
+  diff_p = post$a[,1] %>% inv_logit - post$a[,2] %>% inv_logit
+) %>% 
+  precis %>% plot
+
+```
+```{r}
+postcheck(m11.8)
+```
+```{r}
+pairs(m11.8)
+```
+```{r}
+m12.1 <- ulam(
+  alist(
+    A ~ dbetabinom(N, pbar, theta),
+    logit(pbar) <- a[gid],
+    a[gid] ~ dnorm(0,1.5),
+    theta ~ dexp(1)
+  ),
+  data = dat
+)
+```
+
+```{r}
+post <- extract.samples(m12.1)
+post$da <- post$a[,1] - post$a[,2]
+precis(post, depth = 2)
+```
+```{r}
+gid <- 2
+curve(dbeta2(x,post$a[,gid] %>% logistic() %>% mean, post$theta %>% mean), 0, 1, ylim = c(0,3),lwd =2)
+
+for (i in 1:50) curve(dbeta2(x, post$a[i,gid] %>% logistic() , post$theta[i]), add = T, col = col.alpha("black",.2))
+```
+```{r}
+postcheck(m12.1)
+```
+```{r}
+library(brms)
+```
+```{r}
+beta_binom2 <- custom_family(
+  "beta_binom2", dpars = c("mu", "phi"),
+  links = c("logit", "log"), lb = c(NA, 0),
+  type = "int", vars = "trials[n]"
+)
+```
+```{r}
+stan_funs <- "
+real beta_binom2_lpmf(int y, real mu, real phi, int T){
+  return beta_binomial_lpmf(y|T, mu*phi, (1-mu)*phi);
+}
+int beta_binom_rng(real mu, real phi, int T){
+  return beta_binomial_rng(T, mu*phi, (1-mu)*phi);
+}
+"
+```
+```{r}
+get_prior(data = dat, family = beta_binom2,
+             A | trials(N) ~ 0+factor(gid),)
+```
+
+```{r}
+b12.1 <- brm(data = dat, family = beta_binom2,
+             A | trials(N) ~ 0+factor(gid),
+             prior = prior(normal(0,2), class = b) +
+               prior(exponential(1), class = phi),
+             stan_funs = stan_funs
+             )
+```
+```{r}
+b12.1 <- update(b12.1, sample_prior = "yes")
+```
+```{r}
+prior_samples(b12.1) %>% head
+```
+```{r}
+posterior_samples(b12.1) %>% head
+```
+```{r}
+posterior_predict(b12.1)
+```
+```{r}
+library(tidybayes)
+```
+
+```{r}
+b12.1 %>% 
+  gather_draws(b_factorgid1, b_factorgid2) %>% 
+  median_qi %>% 
+  mutate_if(is.double, round, digits=3)
+```
+
+```{r}
+expose_functions()
+```
+

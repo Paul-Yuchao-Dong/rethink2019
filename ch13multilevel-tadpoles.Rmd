@@ -1,0 +1,277 @@
+---
+title: "ch13multilevel-tadpoles"
+author: "paul"
+date: "3/24/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+data(reedfrogs)
+d <- reedfrogs
+d$tank <- 1:nrow(d)
+dat <- with(d,list(
+  N = density,
+  S = surv,
+  tank = tank
+))
+```
+```{r}
+str(d)
+```
+
+```{r}
+m13.1 <- ulam(alist(
+  S ~ dbinom(N, p),
+  logit(p) <- a[tank],
+  a[tank] ~ dnorm(0,1.5)
+),
+data = dat, chains = 4, log_lik = T)
+```
+```{r}
+m13.2 <- ulam(alist(
+  S ~ dbinom(N, p),
+  logit(p) <- a[tank],
+  a[tank] ~ dnorm(a_bar, sigma),
+  a_bar ~ dnorm(0, 1.5),
+  sigma ~ dexp(1)
+), data = dat, chains = 4, log_lik = T
+)
+```
+
+```{r}
+compare(m13.1, m13.2)
+```
+```{r}
+precis(m13.1, depth = 2)
+```
+
+```{r}
+precis(m13.2, depth = 2)
+```
+
+```{r}
+post <- extract.samples(m13.2)
+```
+```{r}
+dim(post$a)
+```
+
+```{r}
+d$propsurv.est <- apply(post$a, 2, mean) %>% inv_logit()
+```
+```{r}
+plot(d$propsurv, pch=16, xaxt = "n", xlab = "tank", ylab = "proportion of survival", col = rangi2)
+axis(1, at = c(1, 16, 32, 48), labels = c(1, 16, 32, 48))
+
+points(d$propsurv.est)
+
+# points(d$surv / d$density, pch=12)
+
+abline(h = post$a_bar %>% inv_logit() %>% mean, lty =2)
+abline(h = d$propsurv %>% mean, lty =4)
+```
+
+```{r}
+plot(NULL, xlim=c(-3, 4), ylim = c(0, 0.35), xlab = "Log-odds of survival", ylab = "Density")
+
+for (i in 1:100)
+  curve(dnorm(x, post$a_bar[i], post$sigma[i]), add = T, col = col.alpha("black",.2))
+
+sim_tanks <- rnorm(2000, post$a_bar, post$sigma)
+dens(sim_tanks %>% inv_logit(), adj = 0.1)
+```
+```{r}
+coef(m13.2)
+```
+```{r}
+coef(m13.1)
+```
+```{r}
+a_bar <- 1.5
+sigma <- 1.5
+nponds <- 60
+Ni <- rep(c(5,10, 25, 35), each =15) %>% as.integer()
+```
+```{r}
+a_pond <- rnorm(nponds, a_bar, sigma)
+dat_sim <- data.frame(pond = 1:nponds, Ni = Ni, true_a = a_pond)
+dat_sim <- dat_sim %>% 
+  mutate(Si = rbinom(nponds, Ni, inv_logit(true_a)),
+         p_nopool = Si / Ni)
+
+dat <- with(dat_sim,
+            list(
+              Si = Si,
+              Ni = Ni,
+              pond = pond
+            ))
+```
+```{r}
+m13.3 <- ulam(alist(
+  Si ~ dbinom(Ni, p),
+  logit(p) <- a[pond],
+  a[pond] ~ dnorm(a_bar, sigma),
+  a_bar ~ dnorm(0, 1.5),
+  sigma ~ dexp(1)
+),
+data = dat, chains =4, log_lik = T)
+```
+
+```{r}
+precis(m13.3)
+```
+
+```{r}
+post <- extract.samples(m13.3)
+dat_sim$p_partpool <- apply(post$a %>% inv_logit(), 2, mean)
+dat_sim$p_true <- dat_sim$true_a %>% inv_logit()
+```
+```{r}
+nopool_err <- with(dat_sim, p_true - p_nopool) %>% abs
+partialpool_err <- with(dat_sim, p_true - p_partpool) %>% abs
+```
+```{r}
+plot(nopool_err, pch=16, col = rangi2)
+points(partialpool_err)
+```
+```{r}
+aggregate(nopool_err, list(dat_sim$Ni), mean)
+```
+
+```{r}
+aggregate(partialpool_err, list(dat_sim$Ni), mean)
+```
+```{r, message=FALSE, warning=FALSE, results='hide'}
+a_bar <- 1.5
+sigma <- 1.5
+nponds <- 60
+Ni <- rep(c(5,10, 25, 35), each =15) %>% as.integer()
+a_pond <- rnorm(nponds, a_bar, sigma)
+dat_sim <- data.frame(pond = 1:nponds, Ni = Ni, true_a = a_pond)
+dat_sim <- dat_sim %>% 
+  mutate(Si = rbinom(nponds, Ni, inv_logit(true_a)),
+         p_nopool = Si / Ni)
+
+newdat <- with(dat_sim,
+            list(
+              Si = Si,
+              Ni = Ni,
+              pond = pond
+            ))
+m13.3new <- stan(fit=m13.3@stanfit, data = newdat, chains = 4)
+post <- extract.samples(m13.3new)
+dat_sim$p_partpool <- apply(post$a %>% inv_logit(), 2, mean)
+dat_sim$p_true <- dat_sim$true_a %>% inv_logit()
+nopool_err <- with(dat_sim, p_true - p_nopool) %>% abs
+partialpool_err <- with(dat_sim, p_true - p_partpool) %>% abs
+plot(nopool_err, pch=16, col = rangi2)
+points(partialpool_err)
+
+```
+```{r}
+
+aggregate(nopool_err, list(dat_sim$Ni), mean) %>% 
+  cbind(., aggregate(partialpool_err, list(dat_sim$Ni), mean))
+
+```
+# start the brms part
+```{r}
+library(brms)
+library(tidybayes)
+```
+```{r}
+d %>% glimpse()
+```
+
+```{r}
+b13.1 <- brm(data=d, family = binomial,
+             surv | trials(density) ~ 0 + factor(tank),
+             prior = prior(normal(0, 1.5), class = b)
+             )
+```
+```{r}
+b13.2 <- brm(data = d, family = binomial,
+             surv | trials(density) ~ 1 + (1|tank),
+             prior = prior(normal(0, 1.5), class = Intercept)+
+               prior(exponential(1), class = sd)
+             )
+```
+
+```{r}
+waic(b13.1, b13.2)
+```
+```{r}
+loo(b13.1, b13.2)
+```
+```{r}
+kfold(b13.1, b13.2,K=10, cores =4)
+```
+
+```{r}
+post <- posterior_samples(b13.2)
+```
+
+```{r}
+postMdn <- b13.2 %>% 
+  spread_draws(r_tank[tank, ],b_Intercept) %>% 
+  median_qi(postMdn = inv_logit_scaled(r_tank+b_Intercept)) %>% 
+  bind_cols(d) 
+```
+
+```{r}
+library(ggthemes)
+```
+```{r}
+postMdn %>% 
+  ggplot(aes(tank, postMdn))+
+  geom_hline(yintercept = post$b_Intercept %>% inv_logit_scaled() %>%  median, lty =2, size = 1/4)+
+  geom_vline(xintercept = c(16.5, 32.5), size = 1/4)+
+  geom_point(aes(y = propsurv), color = "orange2")+
+  geom_point(shape=1)+
+  coord_cartesian(ylim=c(0,1))+
+   labs(title    = "Multilevel shrinkage!",
+       subtitle = "The empirical proportions are in orange while the model-\nimplied proportions are the black circles. The dashed line is\nthe model-implied average survival proportion.") +
+  theme_fivethirtyeight()+
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+ranef(b13.2) %>% head() coef
+```
+
+```{r}
+tibble(x=c(-4,5)) %>% 
+  ggplot(aes(x))+
+  mapply(function(mean, sd){
+    stat_function(
+      fun=dnorm,
+      args = list(mean = mean, sd = sd),
+      alpha = .2,
+      color = "orange2"
+    )
+  },
+    mean=post$b_Intercept[1:100],
+    sd = post$sd_tank__Intercept[1:100]
+  )+
+    labs(title = "Population survival distribution",
+       subtitle = "The Gaussians are on the log-odds scale.") +
+  theme_fivethirtyeight()+
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(size = 13),
+        plot.subtitle = element_text(size=10)
+        )
+```
+```{r}
+ggplot(data = post)+
+  geom_density(aes(x = rnorm(
+    n = nrow(post),
+    mean = post$b_Intercept,
+    sd = post$sd_tank__Intercept
+  ) %>% inv_logit_scaled()
+  ), fill = "orange2", size = 0)+
+  theme_fivethirtyeight()
+```
+

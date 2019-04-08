@@ -1,0 +1,117 @@
+---
+title: "HMC"
+author: "paul"
+date: "2/3/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(rethinking)
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r myU4}
+# myU4 needs to return neg-log-probability
+myU4 <- function(q, a = 0, b = 1, k = 0, d = 1){
+  muy <- q[1]
+  mux <- q[2]
+  U <- sum(dnorm(y, muy, 1, log=T)) + sum(dnorm(x, mux, 1, log=T))+ dnorm(muy, a, b, log=T)+ dnorm(mux, k, d, log=T)
+  return(-U)
+}
+```
+```{r myU_grad4}
+# need vector of partial derivatives of U with respect to vector q
+myU_grad4 <- function(q, a = 0, b = 1, k = 0, d = 1){
+  muy <- q[1]
+  mux <- q[2]
+  G1 <- sum(y-muy)+(a-muy)/b^2 #dU/dmuy
+  G2 <- sum(x-mux)+(k-mux)/d^2 #dU/dmux
+  return(c(-G1,-G2))
+}
+
+```
+
+```{r}
+set.seed(7)
+y <- rnorm(50)
+x <- rnorm(50)
+x <- as.numeric(scale(x))
+y <- as.numeric(scale(y))
+
+```
+
+```{r figure 9.6}
+library(shape)
+```
+```{r}
+Q=list()
+Q$q <- c(-0.1, 0.2)
+pr <-  0.3
+step <- 0.03
+L <- 11
+n_samples <- 4
+```
+
+```{r}
+HMC2 <- function(U, grad_U, step, L, current_q){
+  q = current_q
+  p = rnorm(length(q), 0, 1) # random flick - p is momentum
+  current_p = p
+  # Make a half step for momentum at the beginning
+  p = p - step*grad_U(q)/2
+  # Init the bookkeeping - saves the trajactory
+  qtraj = matrix(NA, nrow = L+1, ncol = length(q))
+  ptraj <- qtraj
+  qtraj[1,] = current_q
+  ptraj[1,] = p
+  # Alternate full steps for position and momentum
+  for (i in 1:L){
+    q = q + step*p # full step for position
+    # make a full step for momentum, except at end of trajectory
+    if( i!=L){
+      p = p - step * grad_U(q)
+      ptraj[i+1,] <- p
+    }
+    qtraj[i+1,] <- q
+  }
+  # Make a half step for momentum at the end
+  p = p - step*grad_U(q)/2
+  ptraj[L+1,] <- p
+  # negate momentum at the end of trajectory to make the proposal symmetric
+  p = -p
+  # evaluation potential kinetic energy at start and end if trajectory
+  current_U <- U(current_q)
+  current_K <- sum(current_p^2)/2
+  proposed_U <- U(q)
+  proposed_K <- sum(p^2)/2
+  #Accept or reject the state at the end of the trajectory
+  accept <- 0
+  if(runif(1) < exp(current_U - proposed_U + current_K - proposed_K)){ # if total energy is bigger afterwards, definitely accept
+    new_q = q
+    accept = 1
+  } else new_q <- current_q # reject
+  return(list(q=new_q, traj=qtraj, ptraj=ptraj, accept=accept))
+}
+```
+```{r}
+plot(NULL, ylab = "muy", xlab="mux", xlim=c(-pr,pr), ylim=c(-pr,pr))
+path_col <- col.alpha("black", 0.5)
+points(Q$q[1], Q$q[2], pch=4, col="black")
+for (i in 1:n_samples){
+  Q <- HMC2(myU4, myU_grad4, step, L, Q$q)
+  if (n_samples<10){
+    for (j in 1:L){
+      K0 <- sum(Q$ptraj[j,]^2)/2
+      lines(Q$traj[j:(j+1),1], Q$traj[j:(j+1),2], col = path_col, lwd = 1+ 2 * K0)
+    }
+    points(Q$traj[1:L+1,], pch=16, col = "white", cex=0.35)
+    Arrows(Q$traj[L,1], Q$traj[L,2], Q$traj[L+1,1], Q$traj[L+1,2], arr.length = 0.35, arr.adj = 0.7)
+    text(Q$traj[L+1,1], Q$traj[L+1,2], i, cex=0.8, pos=4, offset = 0.4)
+  }
+  points(Q$traj[L+1,1], Q$traj[L+1,2], pch=ifelse(Q$accept==1, 16,1))
+}
+```
+
+
+

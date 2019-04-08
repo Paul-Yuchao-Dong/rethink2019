@@ -18,22 +18,12 @@ d$treatment <- 1 + d$prosoc_left + 2 * d$condition
 dat_list <- list(
   pulled_left = d$pulled_left,
   # prosoc_left = d$prosoc_left, # see if this is tolerable
-  treatment = factor(d$treatment),
-  actor = factor(d$actor)
+  treatment = as.integer(d$treatment),
+  actor = d$actor
 )
 
 library(brms)
 ```
-
-```{r}
-bf(
-  pulled_left | trials(1) ~ a + b, 
-  a ~ 0 + actor, 
-  b ~ 0 + treatment,
-  nl = TRUE
-) %>% get_prior(family = binomial, data = dat_list)
-```
-
 
 
 ```{r}
@@ -70,15 +60,6 @@ m11.4_data <- make_standata(data = dat_list, family = binomial,
 ```{r}
 stancode(m11.4_brms)
 ```
-$$
-\begin{eqnarray}
-\text{pulled_left}_i & \sim & \text{Binomial} (1, p_i) \\
-\text{logit} (p_i) & = & a_{actor[i]} + b_{treatment[i]}\\
-a_{actor[i]} & \sim & \text{Normal} (0, 1.5)\\
-b_{treatment[i]} & \sim & \text{Normal} (0, 0.5)
-\end{eqnarray}
-$$
-
 ```{r}
 m11.4_brms2 <- brm(data = dat_list, family = binomial,
             pulled_left | trials(1) ~ 0 + factor(treatment) + factor(actor),
@@ -141,5 +122,37 @@ get_prior(data = dat_list, family = binomial,
 ```{r}
 dat_list$treatment %>% unique()
 ```
+```{r}
+dat_list <- list(
+  pulled_left = d$pulled_left,
+  # prosoc_left = d$prosoc_left, # see if this is tolerable
+  treatment = factor(d$treatment),
+  actor = factor(d$actor)
+)
 
+```
+
+```{r}
+m11.4_brms5 <- brm(
+  bf(
+    pulled_left|trials(1) ~ a+b,
+    a ~ 0 + actor,
+    b ~ 0 + treatment,
+    nl = TRUE
+    ),
+  data = dat_list, family = binomial,
+  prior = 
+    prior(normal(0,1.5), nlpar = "a") + 
+    prior(normal(0,0.5), nlpar = "b")
+)
+```
+```{r}
+summary(m11.4_brms5)
+```
+```{r}
+stancode(m11.4_brms5)
+```
+```{r}
+marginal_effects(m11.4_brms5, ask = F)
+```
 

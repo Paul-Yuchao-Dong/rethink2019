@@ -1,0 +1,15 @@
+---
+title: "sim_happiness"
+author: "paul"
+date: "1/31/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+```
+```{r}
+sim_happiness(seed = 1997, N_years = 10)
+```
+

@@ -1,0 +1,263 @@
+---
+title: "chimpanzees"
+author: "paul"
+date: "2/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(rethinking)
+data(chimpanzees)
+d <- chimpanzees
+```
+```{r}
+chimpanzees %>% head
+```
+
+```{r}
+d$treatment <- 1 + d$prosoc_left + 2 * d$condition
+```
+```{r}
+xtabs(data = d, ~ treatment + prosoc_left + condition) %>% print
+
+```
+
+```{r}
+m11.1 <- quap(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a,
+    a ~ dnorm(0, 1.5)
+  ),
+  data = d
+)
+```
+```{r}
+set.seed(1999)
+prior <- extract.prior(m11.1)
+```
+```{r}
+p <- inv_logit(prior$a)
+dens(p)
+```
+```{r}
+m11.2 <- quap(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a + b[treatment],
+    a ~ dnorm(0, 1.5),
+    b[treatment] ~ dnorm(0, 0.5)
+  ),
+  data = d
+)
+```
+```{r}
+set.seed(1999)
+priors <- extract.prior(m11.2)
+p <- sapply(1:4, function(i) inv_logit(priors$a + priors$b[,i]))
+```
+```{r}
+dens(abs(p[,1]-p[,2]), adj=0.1)
+```
+```{r}
+dens(p[,1], adj = 0.1)
+```
+```{r}
+dat_list <- list(
+  pulled_left = d$pulled_left,
+  # prosoc_left = d$prosoc_left, # see if this is tolerable
+  treatment = as.integer(d$treatment),
+  actor = d$actor
+)
+```
+```{r}
+m11.4 <- ulam(
+  alist(
+    pulled_left~dbinom(1, p),
+    logit(p) <- a[actor] + b[treatment],
+    a[actor] ~ dnorm(0, 1.5),
+    b[treatment] ~ dnorm(0, 0.5)
+  ),
+  data = dat_list, chains = 4,log_lik = T
+)
+```
+```{r}
+precis(m11.4, depth = 2)
+```
+```{r}
+post <- extract.samples(m11.4)
+p_left <- inv_logit(post$a)
+
+p_left %>% as.data.frame %>% precis %>% plot(xlim=c(0,1))
+```
+
+```{r}
+precis(m11.4, depth = 2, pars = "b") %>% plot
+```
+```{r}
+diffs <- list(
+  db13 = post$b[,1] - post$b[,3],
+  db24 = post$b[,2] - post$b[,4]
+)
+diffs %>% precis %>% plot
+```
+
+
+```{r}
+by(d$pulled_left, list(d$actor, d$treatment), mean) [,]
+```
+
+```{r}
+dat <- list(actor = rep(1:7, each = 4), treatment = rep(1:4, times = 7))
+```
+```{r}
+p_post <- link(m11.4, data = dat)
+p_mu <- apply(p_post, 2, mean)
+p_ci <- apply(p_post, 2, HPDI)
+p_mu
+p_ci
+```
+Simpler Model
+```{r}
+d$side <- d$prosoc_left + 1
+d$cond <- d$condition + 1
+
+dat_list2 <- list(
+  pulled_left = d$pulled_left,
+  actor = d$actor,
+  side = as.integer(d$side),
+  cond = as.integer(d$cond)
+)
+```
+```{r}
+m11.5 <- ulam(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a[actor] + b_s[side] + b_c[cond],
+    a[actor] ~ dnorm(0, 1.5),
+    b_s[side] ~ dnorm(0, 0.5),
+    b_c[cond] ~ dnorm(0, 0.5)
+  ),
+  data = dat_list2, chains = 4, log_lik = T
+)
+```
+```{r}
+precis(m11.5, depth = 2)
+```
+
+```{r}
+compare(m11.4, m11.5, func = LOO)
+```
+```{r}
+compare(m11.4, m11.5)
+```
+```{r}
+stancode(m11.4)
+```
+```{r}
+library(brms)
+```
+```{r}
+df <- get_prior( data = dat_list, family = binomial,
+              pulled_left | trials(1) ~ 0 + (1|treatment) + (1|actor))
+print(df)
+```
+
+
+```{r}
+m11.4_brms <- brm(data = dat_list, family = binomial,
+              pulled_left | trials(1) ~ 0 + (1|treatment) + (1|actor),
+              prior = c(
+                prior(normal(0, 1.5), class = sd, coef = "Intercept", group = "actor"),
+                prior(normal(0, 0.5), class = sd, coef = "Intercept", group = "treatment")
+              )
+              )
+```
+```{r}
+print(m11.4_brms)
+```
+```{r}
+ranef(m11.4_brms)
+```
+
+
+```{r}
+get_prior(data = dat_list, family = binomial,
+              pulled_left | trials(1) ~ factor(treatment) + factor(actor) + 0 
+          )
+```
+```{r}
+  m11.4_brms2 <- brm(data = dat_list, family = binomial,
+                pulled_left | trials(1) ~ 0 + factor(treatment) + factor(actor),
+                prior = prior(normal(0, 1.5), class = b)
+                )
+```
+```{r}
+summary(m11.4_brms)
+```
+```{r}
+rethinking::stancode(m11.4)
+```
+```{r}
+stancode(m11.4_brms)
+```
+```{r}
+library(rethinking)
+```
+```{r}
+post <- extract.samples(m11.4)
+mean(exp(post$b[,4] - post$b[,2]))
+```
+
+```{r}
+data("chimpanzees")
+d <- chimpanzees
+d$treatment <- 1 + d$prosoc_left + d$condition * 2
+d$side <- 1 + d$prosoc_left
+d$cond <- 1 + d$condition
+d_agg <- aggregate(
+  d$pulled_left,
+  list(treatment = d$treatment, side = d$side, cond = d$cond, actor = d$actor),
+  FUN = function(x) data.frame(left_pulls = sum(x), n = length(x))
+) %>% do.call(data.frame , . )
+```
+```{r}
+View(d_agg)
+```
+```{r}
+dat <- with(d_agg,
+            list(
+              left_pulls = as.integer(x.left_pulls),
+              treatment = as.integer(treatment),
+              actor = actor,
+              side = side,
+              cond = cond
+            )
+            )
+```
+```{r}
+m11.6 <- ulam(
+  alist(
+    left_pulls ~ dbinom(18L, p),
+    logit(p) <-a[actor] + b[treatment],
+    a[actor] ~ dnorm(0,1.5),
+    b[treatment] ~ dnorm(0,0.5)
+  ),
+  data = dat, chains = 4, log_lik = T
+)
+```
+```{r}
+precis(m11.6, depth = 2)
+```
+
+```{r}
+compare(m11.4, m11.6, func = LOO)
+```
+```{r}
+(
+  k <- LOOPk(m11.6)
+)
+```
+

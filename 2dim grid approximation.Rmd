@@ -1,0 +1,45 @@
+---
+title: "2dim grid approximation"
+output: html_notebook
+---
+
+
+```{r setup}
+library(data.table)
+library(magrittr)
+library(rethinking)
+
+```
+```{r}
+data("Howell1")
+d <- as.data.table(Howell1)
+```
+```{r}
+str(d)
+precis(d)
+```
+```{r}
+d2 <- d[age>=18]
+```
+```{r}
+mu.list <- seq(140, 160, length.out = 200)
+sigma.list <- seq(4, 9, length.out = 200)
+post <- expand.grid(mu=mu.list, sigma=sigma.list)
+post$LL <- sapply(1:nrow(post),
+                  function(i) sum(dnorm(
+                    d2$height, post$mu[i], post$sigma[i], log = TRUE
+                  ))
+                  )
+post$prod <- post$LL + dnorm(post$mu, 178, 20, TRUE) + dunif(post$sigma, 0, 50, TRUE)
+post$prob <- exp(post$prod - max(post$prod))
+```
+```{r}
+sample.rows <- sample(1:nrow(post), size = 1e4, replace=T, prob = post$prob)
+sample.mu <- post$mu[sample.rows]
+sample.sigma <- post$sigma[sample.rows]
+```
+```{r}
+plot(sample.mu, sample.sigma, col=col.alpha(rangi2,0.1))
+```
+
+

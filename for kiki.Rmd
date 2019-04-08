@@ -1,0 +1,103 @@
+---
+title: "for kiki"
+author: "paul"
+date: "3/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+Data
+```{r}
+df <- tibble::tribble(
+  ~sales, ~prom, ~adv, ~index, ~q1, ~q2, ~q3, ~q4,
+  504.72,  15.6,  30L,   100L,  1L,  0L,  0L,  0L,
+  406.59,  22.2,  36L,   102L,  0L,  1L,  0L,  0L,
+  398.55,     0,  45L,   104L,  0L,  0L,  1L,  0L,
+  587.76,     0,  57L,   104L,  0L,  0L,  0L,  1L,
+  598.92,     0,  39L,   104L,  1L,  0L,  0L,  0L,
+  703.62,  31.8,  21L,   100L,  0L,  1L,  0L,  0L,
+  387.24,  21.3,  12L,    98L,  0L,  0L,  1L,  0L,
+  365.67,   3.9,   6L,    96L,  0L,  0L,  0L,  1L,
+  388.71,     0,   6L,    98L,  1L,  0L,  0L,  0L,
+  372.96,   8.4,  30L,   103L,  0L,  1L,  0L,  0L,
+   603.3,  45.3,  30L,   105L,  0L,  0L,  1L,  0L,
+  614.73,  50.1,  33L,   107L,  0L,  0L,  0L,  1L,
+  484.38,  39.6,   6L,   107L,  1L,  0L,  0L,  0L,
+  227.76,   4.2,  33L,   107L,  0L,  1L,  0L,  0L,
+  329.13,     0,   6L,   108L,  0L,  0L,  1L,  0L,
+  308.25,     0,   3L,   105L,  0L,  0L,  0L,  1L,
+  433.86,     0,  45L,   103L,  1L,  0L,  0L,  0L,
+  514.98,  13.8,  48L,   108L,  0L,  1L,  0L,  0L,
+   404.7,  17.7,   0L,   110L,  0L,  0L,  1L,  0L,
+  245.43,     0,  15L,   112L,  0L,  0L,  0L,  1L,
+   433.2,  17.4,   9L,   113L,  1L,  0L,  0L,  0L,
+  627.24,  37.8,  54L,   112L,  0L,  1L,  0L,  0L,
+  647.61,  42.3,  36L,   113L,  0L,  0L,  1L,  0L,
+  342.81,  11.4,  39L,   114L,  0L,  0L,  0L,  1L
+  )
+
+```
+Create lagged variables and cold season
+```{r}
+df <- df %>% 
+  mutate(lagged_prom1 = lag(prom, 1),
+         lagged_prom2 = lag(prom, 2),
+         lagged_adv1 = lag(adv, 1),
+         lagged_adv2 = lag(adv, 2),
+         cold = case_when(
+           (q1 == 1)|(q2==1) ~ 1,
+           TRUE ~ 0
+         )
+         )
+```
+Prom's total effects on sales
+```{r}
+lm(data = df, sales ~ prom) %>% summary
+
+```
+Adv's total effects on sales
+```{r}
+lm(data = df, sales ~ adv) %>% summary
+```
+Considering lagged prom, 1 dollar of prom result in  about 3 dollar sales increase across periods 
+```{r}
+lm(data = df, sales ~ prom + lagged_prom1) %>% summary
+```
+adv is more effective to later quarter
+```{r}
+lm(data = df, sales ~ lagged_adv1) %>% summary
+```
+Full model explained over 70% of sales variations
+```{r}
+lm(data = df, sales ~ lagged_adv1 + lagged_prom1 + prom) %>% summary
+```
+Index have no predictive power to sales
+
+```{r}
+lm(data = df, sales ~ index) %>% summary
+```
+Correlation very close to zero
+```{r}
+cor(df$sales, df$index)
+```
+Impact of quarters not significant
+```{r}
+lm(data = df, sales ~ q1 + q2 + q3) %>% summary
+```
+Impact of quarters not significant even conditioned on all other factors
+```{r}
+lm(data = df, sales ~ q1 + q2 + q3 + lagged_adv1 + lagged_prom1 + prom) %>% summary
+```
+Divide quarters into seasons, no impact
+```{r}
+lm(data = df, sales~cold) %>% summary
+```
+Adopting full model, still no impact
+```{r}
+
+lm(data = df, sales ~ cold + lagged_adv1 + lagged_prom1 + prom) %>% summary
+```
+

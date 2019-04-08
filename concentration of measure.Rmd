@@ -1,0 +1,36 @@
+---
+title: "concentration of measure"
+author: "paul"
+date: "2/3/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(rethinking)
+```
+```{r}
+T_ <- 1e3
+```
+```{r}
+rad_dist <- function(Y) sqrt(sum(Y^2))
+```
+
+```{r}
+dist_from_mode <- function(D){
+  # Y <- rmvnorm(T_, rep(0, D), diag(D))
+  Y <- rnorm(T_*D, 0, 1)
+  Y <- matrix(Y, nrow = T_)
+  Rd <- sapply(1:T_, function(i) rad_dist(Y[i,]))
+  dens(Rd)
+}
+```
+
+```{r}
+dist_from_mode(1)
+dist_from_mode(3)
+dist_from_mode(10)
+dist_from_mode(100)
+dist_from_mode(1000)
+```

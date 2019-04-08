@@ -1,0 +1,98 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# Week 1 Homework question 3
+Construct the problem step by step with testing
+## First generate experiment data, the aim is to find out how many trials is powerful enough to have a more precise credible interval under grid approximation
+```{r setup}
+library(tidyverse)
+library(rethinking)
+```
+
+
+```{r}
+experiment_result <- function(trials){
+  rbinom(1, trials, prob = 0.7)
+}
+
+experiment_data <- function(trials){
+  c(result = experiment_result(trials), n = trials)
+}
+```
+test experiment data generation
+```{r}
+test <- lapply(2^(1:4), experiment_data)
+```
+Constrcut the grid and prior
+```{r}
+p_grid <- seq(0, 1, length.out=1000)
+prior <- c(rep(0,500), rep(1:500))
+prior <- prior / sum(prior)
+```
+Now the likelihood function, i.e. how likely is the data if given parameter
+```{r}
+likelihood <- function(data, parameter) {
+  dbinom(data["result"], data["n"], prob = parameter)
+}
+```
+```{r}
+test <- mapply(likelihood, test, 0.7)
+```
+generate posterior
+```{r}
+get_spread <- function(num_trials) { 
+  data <- experiment_data(num_trials)
+  posterior <- prior * likelihood(data, p_grid)
+  posterior <- posterior / sum(posterior)
+  c(n = num_trials, calc_spread(posterior))
+}
+
+calc_spread <- function(posterior){
+  samples <- sample(p_grid, 1e4, replace = T, prob = posterior)
+  upper_value <- quantile(samples, 0.995)
+  lower_value <- quantile(samples, 0.005)
+  
+  names(upper_value) <- NULL
+  names(lower_value) <- NULL
+  c(upper = upper_value, lower =  lower_value, spread = upper_value - lower_value)
+}
+```
+```{r}
+result <- data.frame(t(sapply(2^(1:12), get_spread)))
+```
+```{r}
+result %>% 
+  ggplot(aes(x = n, y= spread))+
+  geom_line()+
+  geom_errorbar(aes(ymax = upper, ymin = lower))
+```
+```{r}
+# data.frame() %>% 
+  data.table(n = seq(2,2.5, length.out = 5) * 1000)[, as.list(get_spread(n)), by = n]
+```
+```{r}
+data.table(n=2^(1:12))
+```
+
+```{r}
+data(cherry_blossoms)
+d <- cherry_blossoms
+precis(d)
+```
+
+```{r}
+B <- methods(class = class(d))
+```
+
+```{r}
+WAIC(d)
+```
+```{r}
+B <- methods(precis)
+```
+
+```{r}
+attr(B, "info")
+```
+

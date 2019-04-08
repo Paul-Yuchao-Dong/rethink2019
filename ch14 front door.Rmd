@@ -1,0 +1,184 @@
+---
+title: "ch14 front door"
+author: "paul"
+date: "4/7/2019"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+library(ggdag)
+library(dagitty)
+```
+```{r}
+x <- dagitty('dag {
+             bb="0,0,1,1"
+             M [pos="0.5,0"]
+             U [pos="0.5,0.5"]
+             X [pos="0,0"]
+             Y [pos="1,0"]
+             M -> Y
+             U -> X
+             U -> Y
+             X -> M
+             }')
+ggdag(x)
+```
+
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + M + rnorm(N)
+dat <- list(X = X, M = M, Y = Y)
+```
+
+Naively regress Y ~ X could show strong correlation
+```{r}
+lm(Y ~ X) %>% summary
+```
+
+
+First, attempt model the X->M and M->Y, and set mu_M and mu_Y to covariates
+```{r}
+
+front_1 <- ulam(alist(
+  c(Y, M) ~ multi_normal(c(mu_y, mu_m), Rho, Sigma),
+  mu_y <- Ybar + bMY * M,
+  mu_m <- Mbar + bXM * X,
+  c(Ybar, Mbar) ~ dnorm(0,1),
+  c(bMY, bXM) ~ dnorm(1, 0.5),
+  Rho ~ lkj_corr(2),
+  Sigma ~ dexp(1)   
+),
+data = dat, chains = 4, cores = 4
+)
+
+```
+```{r}
+precis(front_1, depth = 3)
+```
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + M + rnorm(N)
+dat_sim <- list(X = X, M = M, Y = Y)
+
+front_1x <- ulam(front_1, data = dat_sim, chains = 4, cores = 4)
+precis(front_1x, depth = 3)
+```
+
+if we remove the link M -> Y
+
+```{r}
+x <- dagitty('dag {
+             bb="0,0,1,1"
+             M [pos="0.5,0"]
+             U [pos="0.5,0.5"]
+             X [pos="0,0"]
+             Y [pos="1,0"]
+             U -> X
+             U -> Y
+             X -> M
+             }')
+ggdag(x)
+```
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + rnorm(N)
+dat_sim <- list(X = X, M = M, Y = Y)
+lm(Y~X) %>% summary
+
+front_1x <- ulam(front_1, data = dat_sim, chains = 4, cores = 4)
+precis(front_1x, depth = 3)
+```
+a different approach where the X->Y is explicitly modeled
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + M + rnorm(N)
+dat <- list(X = X, M = M, Y = Y)
+lm(Y ~ X + M) %>% summary
+```
+
+
+```{r}
+front_2 <- ulam(alist(
+  c(Y, M) ~ multi_normal(c(mu_y, mu_m), Rho, Sigma),
+  mu_y <- Ybar + bMY * M + bXY  * X,
+  mu_m <- Mbar + bXM * X,
+  c(Ybar, Mbar) ~ dnorm(0,1),
+  c(bMY, bXM, bXY) ~ dnorm(1, 0.5),
+  Rho ~ lkj_corr(2),
+  Sigma ~ dexp(1)   
+),
+data = dat, chains = 4, cores = 4
+)
+```
+```{r}
+precis(front_2, depth = 3)
+```
+
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + rnorm(N)
+dat_sim <- list(X = X, M = M, Y = Y)
+lm(Y~X+M) %>% summary
+
+front_2x <- ulam(front_2, data = dat_sim, chains = 4, cores = 4)
+precis(front_2x, depth = 3)
+```
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + M + rnorm(N)
+dat_sim <- list(X = X, M = M, Y = Y)
+lm(Y~X+M) %>% summary
+
+front_2y <- ulam(front_2, data = dat_sim, chains = 4, cores = 4)
+precis(front_2y, depth = 3)
+```
+```{r}
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + M + rnorm(N)
+dat <- list(X = X, M = M, Y = Y)
+lm(Y ~ X + M) %>% summary
+```
+```{r}
+front_3 <- ulam(alist(
+  c(X, Y) ~ multi_normal(c(mu_x, mu_y), Rho, Sigma),
+  mu_y <- Ybar + bMY * M + bXY  * X,
+  mu_x <- Xbar + bMX * M,
+  c(Ybar, Xbar) ~ dnorm(0,1),
+  c(bMY, bMX, bXY) ~ dnorm(1, 0.5),
+  Rho ~ lkj_corr(2),
+  Sigma ~ dexp(1)   
+),
+data = dat, chains = 4, cores = 4
+)
+```
+```{r}
+precis(front_3, depth = 3) %>% plot
+```
+```{r}
+precis(front_2, depth = 3) %>% plot
+```
+

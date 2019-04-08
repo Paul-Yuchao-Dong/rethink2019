@@ -1,0 +1,181 @@
+---
+title: "Survival analysis"
+author: "paul"
+date: "3/14/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+data(AustinCats)
+d <- AustinCats
+```
+rethinking exponential regression
+```{r}
+data(AustinCats)
+d <- AustinCats
+dat <- with(d,
+            list(color_id = ifelse(color == "Black", 1L, 2L),
+                 adopted = ifelse(out_event == "Adoption", 1L, 0L),
+                 days_to_event = days_to_event %>% as.numeric()
+                   )
+            )
+```
+```{r}
+m11.14 <- ulam(
+  alist(
+    days_to_event | (adopted == 1) ~ exponential(lambda),
+    days_to_event | (adopted == 0) ~ custom(exponential_lccdf(!Y|lambda)),
+    log(lambda) <-  -a[color_id] ,
+    a[color_id] ~ dnorm(0,1)
+  ),
+  data = dat, chains = 4, cores = 4
+)
+```
+
+```{r}
+post <- extract.samples(m11.14)
+post$D <- post$a %>% exp()
+precis(post, 2)
+```
+```{r}
+N <- 2
+x <- replicate(1e5, min(runif(N, 1, 100)))
+y <- replicate(1e5, min(runif(5, 1, 100)))
+curve(dexp(x,5/100), 0, 100)
+dens(x, add = T)
+dens(y, add = T)
+```
+```{r}
+m_exp <- ulam(alist(
+  y ~ dexp(lamb),
+  lamb <- 1.0 / mu,
+  log(mu) <- a,
+  a ~ dnorm(0, 10)
+), data = list(y=y)
+)
+```
+```{r}
+post <- extract.samples(m_exp)
+post$D <- post$a %>% exp
+precis(post)
+```
+```{r}
+x <- replicate(1e5, sort(runif(10, 1, 100))[2])
+y <- replicate(1e5, sort(runif(10, 1, 100))[5])
+```
+
+
+```{r}
+dens(x)
+dens(y, add = T)
+curve(dgamma(x, shape = 10, rate = 0.2), 0, 100, add = T, col = "red")
+curve(dgamma2(x, mu = 50, scale = 5), 0, 100, add = T, col = "blue")
+curve(dgamma(x, shape = 2.5, rate = 0.05), 0, 100, add = T, col = "red")
+curve(dgamma2(x, mu = 20, scale = 2), 0, 100, add = T, col = "blue")
+```
+```{r}
+
+x <- replicate(1e5, sort(runif(10, 1, 100))[2])
+y <- replicate(1e5, sort(runif(10, 1, 100))[5])
+```
+
+```{r}
+dens(x)
+dens(y, add = T)
+curve(dgamma(x, shape = 1.25, rate = 0.05), 0, 100, add = T, col = "red")
+curve(dgamma2(x, mu = 25, scale = 20), 0, 100, add = T, col = "blue")
+curve(dgamma(x, shape = 5, rate = 0.02), 0, 100, add = T, col = "red")
+curve(dgamma2(x, mu = 20, scale = 50), 0, 100, add = T, col = "blue")
+
+```
+```{r}
+library(fitdistrplus)
+```
+```{r}
+fit.gamma.y <- fitdist(y, distr = "gamma")
+fit.gamma.x <- fitdist(x, distr = "gamma")
+```
+```{r}
+coef(fit.gamma.x) 
+coef(fit.gamma.y)
+
+```
+```{r}
+x <- replicate(1e5, sum(rexp(2, 0.2)))
+y <- replicate(1e5, sum(rexp(5, 0.2)))
+```
+2 machine parts
+```{r}
+dens(x, col = "red")
+curve(dgamma(x, 2, 0.2), 0, 100, add = T)
+```
+
+```{r}
+dens(y, col = "red")
+curve(dgamma(x, 5, 0.2), 0, 100, add = T)
+```
+```{r}
+d %>% head
+```
+```{r}
+data(AustinCats)
+d <- AustinCats
+dat <- with(d,
+            list(color_id = ifelse(color == "Black", 1L, 2L),
+                 adopted = ifelse(out_event == "Adoption", 1L, 0L),
+                 days_to_event = days_to_event %>% as.numeric()
+                   )
+            )
+
+
+dat <- dat %>% 
+  as.tibble() %>% 
+  mutate(adopted = as.logical(adopted))
+  
+dat
+```
+```{r}
+unlink("package:rethinking")
+library(brms)
+```
+```{r}
+get_prior(data = dat, family = exponential(),
+              days_to_event | cens(adopted) ~ 0 + factor(color_id))
+```
+
+```{r}
+b11.14 <- brm(data = dat, family = exponential(),
+              days_to_event | cens(adopted) ~ 0 + factor(color_id),
+              prior = prior(normal(0,10), class = b)
+              )
+```
+```{r}
+summary(b11.14)
+```
+```{r}
+library(broom)
+```
+
+```{r}
+posterior_samples(b11.14) %>% 
+  select(contains("b_")) %>% 
+  exp %>% 
+  summarise_all(funs(list(quantile(., probs = c(0.25, 0.5, 0.75))))) %>%
+    unnest %>%
+    transpose %>%
+    setNames(., c('25%', '50%', '75%')) %>%
+    map_df(unlist) 
+```
+
+```{r}
+df <- posterior_samples(b11.14) %>% 
+  select(contains("b_")) %>% 
+  exp 
+```
+```{r}
+sapply(df, function(x) quantile(x, c(0.25, 0.5, 0.75)))%>% t
+```
+

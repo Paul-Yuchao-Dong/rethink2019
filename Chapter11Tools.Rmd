@@ -1,0 +1,171 @@
+---
+title: "Chapter11Tools"
+author: "paul"
+date: "3/3/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = TRUE)
+
+library(tidyverse)
+library(modelr)
+library(rethinking)
+
+data("Kline")
+d <- Kline
+
+```
+```{r}
+
+```
+```{r}
+(d %>% 
+  ggplot(aes(log(population), total_tools, label = culture))+
+  geom_point()+
+  geom_smooth(method = lm)) %>% plotly::ggplotly()
+```
+Skipped part about prior predictive analysis to fix the prior. intercept Normal(3, 0.5)
+```{r}
+
+dat <- with(d, list(
+  T = total_tools,
+  P = population %>% log %>% scale,
+  cid = ifelse(contact == "high", 2, 1) %>% as.integer
+))
+```
+Intercept Only
+```{r}
+m11.9 <- ulam(alist(
+  T ~ dpois(lambda),
+  log(lambda) <- a,
+  a ~ dnorm(3,0.5)
+), data = dat, log_lik= TRUE
+)
+```
+```{r}
+m11.10 <- ulam(alist(
+  T ~ dpois(lambda),
+  log(lambda) <- a[cid] + b[cid]*P,
+  a[cid] ~ dnorm(3,0.5),
+  b[cid] ~ dnorm(0,0.2)
+), data = dat, log_lik = TRUE
+)
+```
+```{r}
+compare(m11.9, m11.10, func = LOO)
+```
+
+```{r}
+get_ribbon <- function(results, func = PI){
+  bounds <- apply(results, 2, func)
+  tibble(
+    avg = apply(results, 2, mean),
+    upper = bounds[2,],
+    lower = bounds[1,]
+  )
+}
+```
+
+
+```{r}
+k <- LOOPk(m11.10)
+df <- data.frame(k = k, P = dat$P, T = dat$T, cid = dat$cid, culture = d$culture)
+
+ns <- 100
+cid <- c(1,2)
+grid <- tibble(
+  P_seq = seq_range(df$P, n= ns, expand = 0.1)
+) %>% 
+  data_grid(P = P_seq, cid) %>% 
+  bind_cols(., link(m11.10, data = .) %>% get_ribbon() )
+
+```
+
+
+```{r}
+p <- ggplot(data = df)+
+  geom_line(data = grid, aes(x = P, y=avg, linetype = factor(cid))) +
+  geom_ribbon(data=grid, aes(x = P, ymin = lower, ymax = upper, group = cid, fill = factor(cid)), alpha = 1/5) +
+  geom_point(aes(P, T, size = 1 + normalize(k), shape = factor(cid), label = culture))+
+  scale_shape_manual(values = c(1,16))+
+  labs(size = "Influence", linetype = "High contact = 1")+
+  guides(fill = FALSE, shape = FALSE)
+p
+plotly::ggplotly(p)
+```
+```{r}
+dat2 <- with(d,
+             list(
+               T = total_tools,
+               P = population,
+               cid = ifelse(contact == "high", 2, 1) %>% as.integer
+             ))
+```
+```{r}
+m11.11 <- ulam(
+  alist(
+    T ~ dpois(lambda),
+    lambda <- exp(a[cid]) * P^b[cid] / g,
+    a[cid] ~ dnorm(1,1),
+    b[cid] ~ dexp(1),
+    g ~ dexp(1)
+  ), data = dat2, chains =4, log_lik = TRUE
+)
+```
+```{r}
+precis(m11.10, depth =2)
+```
+```{r}
+precis(m11.11, depth = 2)
+```
+
+
+```{r}
+compare(m11.11, m11.10, func = LOO)
+```
+
+```{r}
+summary(m11.11)
+```
+
+
+Try brms non-linear model
+```{r}
+library(brms)
+```
+```{r}
+get_prior(data = dat2, family = poisson("identity"),
+  bf(
+  T ~ exp(a) * P ^ (b) / g,
+  a ~ 0 + factor(cid),
+  b ~ 0 + factor(cid),
+  g ~ 1,
+  nl = TRUE
+))
+```
+
+
+```{r}
+b11.11 <- brm(data = dat2, family = poisson("identity"),
+  bf(T ~ exp(a) * P ^ (b) / g,
+  a ~ 0+factor(cid),
+  b ~ 0+factor(cid),
+  g ~ 1,
+  nl = TRUE
+), prior = prior(normal(1,1), nlpar = "a") + prior(exponential(1), nlpar = "b") +  prior(exponential(1), nlpar = "g")
+)
+```
+```{r}
+summary(b11.11)
+```
+```{r}
+precis(m11.11, depth = 2)
+```
+
+Try prior predictive
+
+Try varying gamma with contact
+

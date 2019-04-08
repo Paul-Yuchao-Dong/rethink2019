@@ -1,0 +1,51 @@
+---
+title: "chapter11Survival"
+author: "paul"
+date: "2/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(rethinking)
+```
+
+```{r}
+data(AustinCats)
+d <- AustinCats
+d$adopt <- ifelse( d$out_event=="Adoption" , 1L , 0L )
+dat <- list(
+days_to_event = as.numeric( d$days_to_event ),
+color_id = ifelse( d$color=="Black" , 1L , 2L ) ,
+adopted = d$adopt
+)
+```
+
+
+```{r}
+m11.14 <- ulam(
+alist(
+  days_to_event|adopted==1 ~ exponential( lambda ),
+  days_to_event|adopted==0 ~ custom(exponential_lccdf( days_to_event | lambda )),
+  lambda <- 1.0/mu,
+  log(mu) <- a[color_id],
+  a[color_id] ~ normal(0,1)
+), data=dat , chains=4 , cores=4 )
+```
+```{r}
+stancode(m11.14)
+```
+```{r}
+precis(m11.14, depth = 2)
+```
+
+```{r}
+precis(m11.14, depth = 2)
+```
+
+```{r}
+stancode(m11.14)
+```
+
