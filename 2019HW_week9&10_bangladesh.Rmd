@@ -174,5 +174,54 @@ m_contra_3 <- ulam(
 ```
 ```{r}
 precis(m_contra_3, depth = 2) %>% plot
+
+post_summary3 <- precis(m_contra_3, depth = 2)
+```
+### Model 4 brms version of the non-centered
+
+instead of trying to re-create the parameter and compare with the centered version, decided to use brms to checking.
+
+```{r}
+library(brms)
+```
+```{r}
+get_prior(data = dat, family = bernoulli,
+                  contraception ~  (1 | dist_id))
+```
+
+Cannot test this as brms crashes rstudio if I try to fit model more than 1 layer
+
+```{r}
+b_contra_3 <- brm(data = dat, family = bernoulli,
+                  contraception ~ 1 + (1 | dist_id),
+                  prior = prior(normal(0,1.5), class = Intercept) +
+                          prior(exponential(1), class = sd)
+                  )
+```
+
+### Model 5 varying slope with covariance
+
+```{r}
+dat <- with(d,
+            list(dist_id = district_id,
+                 contraception = use.contraception %>% as.integer(),
+                 urban = urban %>% as.integer()
+                   )
+            )
+```
+
+```{r}
+m_contra_5 <- ulam(
+  alist(
+    contraception ~ bernoulli(p),
+    logit(p) <- a[dist_id] + b[dist_id] * urban,
+    c(a, b)[dist_id] ~ multi_normal(c(mu_a, mu_b), Rho, Sigma),
+    mu_a ~ dnorm(0, 1.5),
+    mu_b ~ dnorm(0, 0.5),
+    Sigma ~ dexp(1),
+    Rho ~ lkj_corr(2)
+  ),
+  data = dat, core = 1, chains = 1
+)
 ```
 
