@@ -2,15 +2,15 @@
 title: "ch14 front door"
 author: "paul"
 date: "4/7/2019"
-output: html_notebook
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(rethinking)
-library(ggdag)
-library(dagitty)
+# library(ggdag)
+# library(dagitty)
 ```
 ```{r}
 x <- dagitty('dag {
