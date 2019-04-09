@@ -1,0 +1,105 @@
+---
+title: "Ch14 front door non bayesian"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Data Generating Process
+
+the **true** effects from X->Y would be 1
+
+
+```{r DGP}
+set.seed(840708)
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + M + rnorm(N)
+dat <- list(X = X, M = M, Y = Y)
+```
+
+
+## Naive Regression
+
+Because of the existence of unmeasured U that both causes X and Y, even if we do `Y ~ X + M`, the coef of X would be different than 0
+
+```{r regression 1}
+lm(Y~X+M) %>% summary
+```
+As predicted, the coef from this linear model is not only different than 0 but also significant
+
+## Front door adjustment
+
+This means that you need to understand precisely the mechanism by which X (let's now say it's smoking) affects Y (lung cancer). Let's say it all flows through variable M (tar in lungs): Y (smoking) affects M (tar), and M (tar) affects Y; there is no direct effect. Then, to find the effect of X on Y, compute the effect of smoking on tar, and then the effect of tar on cancer and multiply the effect of Y on M with the effect of M on Y.
+
+Here, front-door adjustment works because there is no open back-door path from $X$ to $M$. The path $X \leftarrow U \rightarrow Y \leftarrow M$ is blocked. This is because the arrows "collide" in $Y$. So the $X \rightarrow M$ effect is identified.
+
+```{r}
+m <- lm(M ~ X) 
+
+m %>% summary
+
+effect1 <- m %>% coef %>% .[[2]]
+```
+
+So effect from $X \rightarrow M$ would be `r effect1`.
+
+Similarly, the $M \rightarrow Y$ effect is identified because the only back-door path from $M$ to $Y$ runs over $X$, so we can adjust for it using the back-door strategy.
+
+```{r}
+m2 <- lm(Y ~ M + X)
+m2 %>% summary
+effect2 <- coef(m2)[[2]]
+```
+
+```{r}
+total_effect <- effect1 * effect2
+```
+
+In sum, you can identify the "submechanisms", and there is no direct effect, so you can piece together the submechanisms to estimate the overall effect.
+This will not work if $U$ infuences $M$, because then identifying the submechanisms does not work.
+
+in this case the total effects works out to be `r total_effect`, super close to 1 :-)
+
+
+## Testing Time!
+
+would this work for effects other than 1? say, if effect of $X \rightarrow Y$ is only 0.2?
+
+```{r}
+set.seed(840708)
+N <- 1e3
+U <- rnorm(N)
+X <- U + rnorm(N)
+M <- X + rnorm(N)
+Y <- U + 0.2* M + rnorm(N)
+dat <- list(X = X, M = M, Y = Y)
+```
+## Naive Regression
+
+Because of the existence of unmeasured U that both causes X and Y, even if we do `Y ~ X + M`, the coef of X would be different than 0
+
+```{r regression_2}
+lm(Y~X+M) %>% summary
+```
+```{r}
+m <- lm(M ~ X) 
+
+m %>% summary
+
+effect1 <- m %>% coef %>% .[[2]]
+
+m2 <- lm(Y ~ M + X)
+m2 %>% summary
+effect2 <- coef(m2)[[2]]
+
+total_effect <- effect1 * effect2
+
+total_effect
+```
+
