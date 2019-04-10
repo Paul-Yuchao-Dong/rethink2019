@@ -232,7 +232,7 @@ dat <- with(d,
             )
 ```
 
-```{r, message=F}
+```{r, message=F, cache=T}
 m_contra_5 <- ulam(
   alist(
     contraception ~ bernoulli(p),
@@ -297,19 +297,85 @@ result <- link(m_contra_5, data=data_grid) %>%
 simulated <- cbind(data_grid, result) 
 ```
 
-```{r}
-
+```{r, warning=FALSE}
+d_2 <- d %>% 
+  rename(dist_id = district_id)
+simulated %>% 
+  ggplot(aes(x = as_factor(urban), y = estimate))+
+  geom_jitter(data = d_2, aes(y = use.contraception), shape=1, height = 0)+
+  geom_point()+
+  geom_errorbar(aes(ymax = upper, ymin = lower))+
+  geom_line(aes(group = dist_id))+
+  facet_wrap(~dist_id, ncol = 10)+
+  theme_fivethirtyeight()+
+  theme(panel.grid.major.x = element_blank())
 
 ```
 
 ```{r}
+data_grid <- d %>% 
+  modelr::data_grid(district_id, urban) %>% 
+  rename(dist_id = district_id)
+result <- sim(m_contra_5, data=data_grid) %>% 
+  apply(2, inv_logit) %>% 
+  summarise_samples()
+
+simulated <- cbind(data_grid, result) 
+
+simulated %>% 
+  ggplot(aes(x = as_factor(urban), y = estimate))+
+  geom_jitter(data = d_2, aes(y = use.contraception), shape=1, height = 0)+
+  geom_point()+
+  geom_errorbar(aes(ymax = upper, ymin = lower))+
+  geom_line(aes(group = dist_id))+
+  facet_wrap(~dist_id, ncol = 10)+
+  theme_fivethirtyeight()+
+  theme(panel.grid.major.x = element_blank())
 
 ```
 
 ```{r}
-
+sample_trans <- d_2 %>% 
+  group_by(dist_id, urban) %>% 
+  summarise(proportion = mean(use.contraception)) %>% 
+  ungroup() %>% 
+  mutate(area = ifelse(urban == 0, "rural", "urban")) %>%
+  select(-urban) %>% 
+  group_by(dist_id) %>% 
+  spread(area, proportion) %>% 
+  replace(is.na(.), 0) %>% 
+  mutate(type = "sample")
 ```
 
+```{r}
+sample_trans %>% 
+  ggplot(aes(urban, rural))+
+  geom_point(shape = 1)+
+  geom_abline(slope = 1, linetype = "dashed")+
+  theme_fivethirtyeight()+
+  labs(x = "urban", y = "rural")
+  
+```
 
+```{r}
+sim_trans <- simulated %>%
+  select(-lower, -upper) %>%
+  rename(proportion = estimate) %>%
+  mutate(area = ifelse(urban == 0, "rural", "urban")) %>%
+  select(-urban) %>% 
+  group_by(dist_id) %>% 
+  spread(area, proportion) %>% 
+  mutate(type = "sim")
+  
+```
 
+```{r}
+bind_rows(sample_trans, sim_trans) %>% 
+  ggplot(aes(urban, rural))+
+  geom_point(aes(shape = type))+
+  geom_line(aes(group = dist_id), alpha=1/5)+
+  geom_abline(slope = 1, linetype = "dashed")+
+  theme_fivethirtyeight()+
+  labs(x = "urban", y = "rural")
+```
 
