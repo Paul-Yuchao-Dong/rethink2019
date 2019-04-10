@@ -267,4 +267,49 @@ p <- d%>%
   theme_fivethirtyeight()
 plotly::ggplotly(p)
 ```
+```{r}
+d_summary <- d%>% 
+  group_by(district, urban) %>% 
+  summarise(proportion = mean(use.contraception)) %>% 
+  ungroup() %>% 
+  mutate(x = 1:n())
+```
+```{r}
+p <- d %>% 
+  ggplot(aes(x = as_factor(urban), y = use.contraception))+
+  # geom_line()+
+  geom_jitter(shape=1, height = 0)+
+  facet_wrap(~district_id, ncol = 10)+
+  theme_fivethirtyeight()+
+  theme(panel.grid.major.x = element_blank())
+
+p
+```
+
+```{r}
+data_grid <- d %>% 
+  modelr::data_grid(district_id, urban) %>% 
+  rename(dist_id = district_id)
+result <- link(m_contra_5, data=data_grid) %>% 
+  apply(2, inv_logit) %>% 
+  summarise_samples()
+
+simulated <- cbind(data_grid, result) 
+```
+
+```{r}
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
 

@@ -10,6 +10,15 @@ unscaler <- function(s, ref){
   (s * sd(ref)) + mean(ref)
 }
 
+summarise_samples <- function(data, point_func = mean, range_func = HPDI, ...){
+  point <- data.frame(
+    estimate = apply(data, 2, point_func)
+  )
+  range_result <- apply(data, 2, range_func, ...) %>% t()
+  colnames(range_result)<-c("lower", "upper")
+  cbind(point, range_result)
+}
+
 calc_intervals <- function(newdata, model){
   link <- fitted(model, newdata = newdata) %>% 
     as.tibble() %>% 
