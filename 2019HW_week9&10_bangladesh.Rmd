@@ -243,7 +243,7 @@ m_contra_5 <- ulam(
     Sigma ~ dexp(1),
     Rho ~ lkj_corr(2)
   ),
-  data = dat, core = 1, chains = 1
+  data = dat, core = 4, chains = 4
 )
 ```
 ```{r}
@@ -377,5 +377,25 @@ bind_rows(sample_trans, sim_trans) %>%
   geom_abline(slope = 1, linetype = "dashed")+
   theme_fivethirtyeight()+
   labs(x = "urban", y = "rural")
+```
+### Model 6 using matrix instead of slopes
+
+Prof proposed this model after previous model shown that the slope is only neccessary to encode the negative correlation pattern.
+
+```{r}
+dat$uid = dat$urban + 1L
+m_contra_6 <- ulam(
+  alist(
+    contraception ~ bernoulli(p),
+    logit(p) <- a[dist_id,uid],
+    vector[2]:a[dist_id] ~ multi_normal(c(r_avg, u_avg), Rho, Sigma),
+    c(r_avg, u_avg) ~ dnorm(0, 1.5),
+    Rho ~ lkj_corr(2),
+    Sigma ~ dexp(1)
+  ), data = dat, cores = 4, chains = 4
+)
+```
+```{r}
+precis(m_contra_6, depth = 3)
 ```
 
