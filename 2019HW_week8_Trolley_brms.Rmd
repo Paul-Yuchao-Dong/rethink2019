@@ -67,11 +67,24 @@ print(w, simplify = F)
 ```
 Similiar result from WAIC comparison
 
-```{r, message=FALSE, cache=TRUE}
-predicted <- predict(m_1)
+### Model 2: Impact of education
 
+```{r}
+Trolley$age.scaled <- Trolley$age %>% scale
+Trolley <- Trolley %>% 
+  mutate(edu.ordered = factor(edu, ordered = TRUE, levels = c("Elementary School","Middle School", "Some High School", "High School Graduate", "Some College", "Bachelor's Degree", "Graduate Degree","Master's Degree")))
+
+get_prior(data = Trolley, family = cumulative,
+          response ~ action + intention + contact + intention:action + intention:contact + mo(edu.ordered) + age.scaled
+          )
 ```
-```{r, message=FALSE, cache=TRUE}
-fitted_1 <- fitted(m_1)
+
+```{r, message=FALSE, cache=TRUE, results="hide"}
+m_3 <- brm(data = Trolley, family = cumulative,
+          response ~ action + intention + contact + intention:action + intention:contact + mo(edu.ordered) + age.scaled,
+          prior = prior(normal(0,0.5), class = b)+
+                  prior(normal(0, 1.5), class = Intercept)+
+                  prior(dirichlet(rep(2, 7)), class = simo, coef = "moedu.ordered1")
+          )
 ```
 
