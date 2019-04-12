@@ -1,0 +1,248 @@
+---
+title: "2019HW_week8_9_bangladesh_brms"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(ggthemes)
+library(brms)
+library(brmstools)
+theme_set(theme_tufte(base_family = 'sans'))
+options(mc.cores = parallel::detectCores())
+
+data('bangladesh', package = 'rethinking')
+d <- bangladesh; rm(bangladesh)
+d <- d %>% 
+  mutate(did = district %>% as_factor())
+```
+```{r}
+get_prior(data=d, family = binomial,
+            use.contraception ~ 0 + factor(did))
+```
+### Model 1: traditional fixed effects model
+```{r, message=FALSE, cache=TRUE, results="hide"}
+b_1 <- brm(data=d, family = binomial,
+            use.contraception ~ 0 + factor(did),
+            prior = prior(normal(0,1.5), class = b)
+            )
+```
+```{r}
+fixef(b_1) %>% 
+  as.tibble() %>% 
+  inv_logit_scaled() %>% 
+  bind_cols(d %>% 
+    group_by(did) %>% 
+    summarise(sample_mean = mean(use.contraception)) 
+    ) %>% 
+  ggplot(aes(y = Estimate, ymax = `Q97.5`, ymin = `Q2.5`, x = did))+
+  geom_errorbar()+
+  geom_point(aes(y=sample_mean), shape = 1)
+```
+
+### Model 2: centered partial pooling model
+```{r, cache=T, message=F, results='hide'}
+b_2 <- brm(data = d, family = bernoulli,
+           use.contraception ~ 1 + (1 | did),
+           prior = prior(normal(0,1.5), class  = Intercept) + 
+             prior(exponential(1), class = sd)
+           )
+```
+```{r}
+summary(b_2)
+```
+
+```{r}
+b_1 <- add_criterion(b_1, "waic")
+b_2 <- add_criterion(b_2, "waic")
+
+w <- loo_compare(b_1, b_2, criterion = "waic")
+
+print(w, simplify = F)
+```
+```{r}
+coef(b_2, robust = T)$did %>% 
+  inv_logit_scaled() %>% 
+  as_tibble() %>% 
+  bind_cols(d %>% 
+    group_by(did) %>% 
+    summarise(sample_mean = mean(use.contraception)) 
+    ) %>%
+  ggplot(aes(y = Estimate.Intercept, ymax = `Q97.5.Intercept`, ymin = `Q2.5.Intercept`, x = did))+
+  geom_errorbar()+
+  geom_point(aes(y=sample_mean), shape = 1)
+```
+
+### Model 5 varying slope with covariance
+
+```{r}
+get_prior(data = d, family = bernoulli,
+          use.contraception ~ 1 + urban + (1 + urban | did)
+          )
+```
+
+
+```{r, cache=T, message=F, results='hide'}
+b_5 <- brm(data = d, family = bernoulli,
+          use.contraception ~ 1 + urban + (1 + urban | did),
+          prior = prior(normal(0,1.5), class  = Intercept) + 
+                  prior(normal(0, 0.5), class = b) +
+                  prior(exponential(1), class = sd) + 
+                  prior(lkj(2), class = cor)
+          )
+```
+```{r}
+summary(b_5)
+```
+
+```{r}
+coef(b_5, robust = T)$did[,,2]
+```
+```{r}
+d %>% 
+  ggplot(aes(x = as_factor(urban), y = use.contraception))+
+  # geom_line()+
+  geom_jitter(shape=1, height = 0)+
+  facet_wrap(~did, ncol = 10)+
+  # theme_fivethirtyeight()+
+  theme(panel.grid.major.x = element_blank())
+```
+```{r}
+predictions <- d %>% 
+  modelr::data_grid(did, urban) %>% 
+  tidybayes::add_predicted_draws(b_5) %>%
+  # mutate(.prediction = inv_logit_scaled(.prediction)) %>% # do we need this or not?
+  group_by(did, urban) %>% 
+  summarize(estimate = mean(.prediction))
+```
+```{r}
+d %>% 
+  ggplot(aes(x = as_factor(urban), y = use.contraception))+
+  geom_jitter(shape=1, height = 0)+
+  facet_wrap(~did, ncol = 10)+
+  geom_line(data = predictions,
+            aes(x = as_factor(urban), y = estimate, group = did)
+            )+
+  theme(panel.grid.major.x = element_blank())
+```
+This is the second time I made this chart, and I think the first time I did it wrong by using the inv_logit to transform what came out of the link function. I think the predicted_draws and fitted_draws of brms have already been transformed. same convention for rethinking package.
+
+```{r}
+pp_check(b_5)
+```
+
+```{r}
+d %>% 
+  modelr::data_grid(did, urban) %>% 
+  tidybayes::add_predicted_draws(b_5)
+```
+```{r}
+d %>% 
+  modelr::data_grid(did, urban) %>% 
+  posterior_linpred(b_5, newdata = ., summary = F) %>% 
+  range()
+```
+
+  fitted(b_5, transform = logit_scaled) %>% head
+```{r}
+```
+
+```{r}
+coefplot(b_5)
+```
+```{r}
+tidyfitted(b_5)
+```
+```{r}
+panels(b_5, xvar = "urban", data = T)
+```
+
+```{r}
+spaghetti(b_5, xvar = "urban")
+```
+
+### Model 6 using matrix instead of slopes
+```{r}
+get_prior(data = d, family = bernoulli,
+          use.contraception ~ 0 + factor(urban) + (0 + factor(urban) | did)
+          )
+```
+
+
+```{r, cache=T, message=F, results='hide'}
+b_6 <- brm(data = d, family = bernoulli,
+          use.contraception ~ 0 + factor(urban) + (0 + factor(urban) | did),
+          prior = prior(normal(0, 1.5), class = b) +
+                  prior(exponential(1), class = sd) + 
+                  prior(lkj(2), class = cor)
+          )
+```
+```{r}
+summary(b_6)
+```
+
+### Model 7 causal inference of age and living children
+
+```{r, cache=T, message=F, results='hide'}
+d <- d %>% 
+  mutate(A = age.centered %>% scale,
+         C = living.children %>% scale
+         )
+b_7 <- brm(data = d, family = bernoulli,
+          use.contraception ~ 1 + urban + (1 + urban | did) + A + C,
+          prior = prior(normal(0,1.5), class  = Intercept) + 
+                  prior(normal(0, 0.5), class = b) +
+                  prior(exponential(1), class = sd) + 
+                  prior(lkj(2), class = cor)
+          )
+```
+
+```{r}
+summary(b_7)
+```
+### Model 9 total influence of age
+
+```{r, cache=T, message=F, results='hide'}
+b_9 <- brm(data = d, family = bernoulli,
+          use.contraception ~ 1 + urban + (1 + urban | did) + A,
+          prior = prior(normal(0,1.5), class  = Intercept) + 
+                  prior(normal(0, 0.5), class = b) +
+                  prior(exponential(1), class = sd) + 
+                  prior(lkj(2), class = cor)
+          )
+summary(b_9)
+```
+
+### Model 8: influence of Age with interaction from number of children
+
+```{r, cache=T, message=F, results='hide'}
+b_8 <- brm(data = d, family = bernoulli,
+          use.contraception ~ 1 + urban + (1 + urban | did) + A + A:C,
+          prior = prior(normal(0,1.5), class  = Intercept) + 
+                  prior(normal(0, 0.5), class = b) +
+                  prior(exponential(1), class = sd) + 
+                  prior(lkj(2), class = cor)
+          )
+summary(b_8)
+```
+ A interaction model cannot block the backdoor!
+
+### Model 10: influence of Age when the number of living children is treated as montonic
+
+```{r, cache=T, message=F, results='hide'}
+b_10 <- brm(data = d, family = bernoulli,
+          use.contraception ~ 1 + urban + (1 + urban | did) + A + mo(living.children),
+          prior = prior(normal(0,1.5), class  = Intercept) + 
+                  prior(normal(0, 0.5), class = b) +
+                  prior(exponential(1), class = sd) + 
+                  prior(lkj(2), class = cor)
+          )
+summary(b_10)
+```
+```{r}
+marginal_effects(b_10)
+```
+

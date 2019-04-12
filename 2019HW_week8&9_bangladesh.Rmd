@@ -258,7 +258,7 @@ m_contra_5 <- ulam(
 ```{r}
 precis(m_contra_5, depth = 3) 
 ```
-The correlation between $a$ and $b$ is negative. This does not mean being in the urban area depresses the use of contraception, that would be counter intuitive. In fact, $mu_b$ is definitely positive, which showed that the effect of being in an urban area, everything else being equal, is more conducive to the adoption of contraceptives.
+The correlation between $a$ and $b$ is negative. This does not mean being in the urban area depresses the use of contraception, that would be counter intuitive. In fact, $\mu_{b}$ is definitely positive, which showed that the effect of being in an urban area, everything else being equal, is more conducive to the adoption of contraceptives.
 
 What the correlation between $a$ and $b$ showed is that for a new dsitrict, the higher the expected adoption rate, the lower the impact of that new district being urban. Put it in story form, if a district is prosperous, they it is more likely the women in the district would use contraception, and if the adoption rate of contraception is high already, the difference between urban and rural area would be smaller.
 
@@ -387,6 +387,7 @@ bind_rows(sample_trans, sim_trans) %>%
   theme_fivethirtyeight()+
   labs(x = "urban", y = "rural")
 ```
+
 ### Model 6 using matrix instead of slopes
 
 Prof proposed this model after previous model shown that the slope is only neccessary to encode the negative correlation pattern.
