@@ -1,0 +1,77 @@
+---
+title: "2019HW_week8_Trolley_brms"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(ggthemes)
+library(brms)
+library(brmstools)
+theme_set(theme_tufte(base_family = 'sans'))
+options(mc.cores = parallel::detectCores())
+
+data('Trolley', package = 'rethinking')
+
+```
+
+### Trace the model developed in the book
+
+```{r, message=FALSE, cache=TRUE, results="hide"}
+m_1 <- brm(data = Trolley, family = cumulative,
+           response ~ action + contact + intention + intention:action + intention:contact,
+          prior = prior(normal(0, 0.5), class = b) + 
+                  prior(normal(0,1.5), class = Intercept)
+          )
+summary(m_1)
+```
+```{r}
+marginal_effects(m_1)
+```
+
+### Model 1: varying intercepts
+
+```{r, message=FALSE, cache=TRUE, results="hide"}
+m_2 <- brm(data = Trolley, family = cumulative,
+           response ~ 1 + action + contact + intention + intention:action + intention:contact + (1|id),
+           prior = prior(normal(0,0.5), class = b) +
+                   prior(normal(0, 1.5), class = Intercept)+
+                   prior(exponential(1), class = sd)
+           )
+summary(m_2)
+```
+#### WAIC comparison
+
+```{r, message=FALSE, cache=TRUE, results="hide"}
+m_1 <- add_waic(m_1)
+m_2 <- add_waic(m_2)
+
+w <- loo_compare(m_1, m_2, criterion = "waic")
+
+print(w, simplify = F)
+```
+model with varying effects is preferred, but it also introduces more parameters 
+
+#### LOO comparison
+
+```{r, message=FALSE, cache=TRUE, results="hide"}
+m_1 <- add_loo(m_1)
+m_2 <- add_loo(m_2)
+
+w <- loo_compare(m_1, m_2, criterion = "loo")
+
+print(w, simplify = F)
+```
+Similiar result from WAIC comparison
+
+```{r, message=FALSE, cache=TRUE}
+predicted <- predict(m_1)
+
+```
+```{r, message=FALSE, cache=TRUE}
+fitted_1 <- fitted(m_1)
+```
+
