@@ -88,3 +88,20 @@ m_3 <- brm(data = Trolley, family = cumulative,
           )
 ```
 
+```{r}
+summary(m_3)
+```
+### Model 3: Gender as another comfounder for Resp ~ Education
+
+```{r, message=FALSE, cache=TRUE, results="hide"}
+m_4 <- brm(data = Trolley, family = cumulative,
+          response ~ action + intention + contact + intention:action + intention:contact + mo(edu.ordered) + age.scaled + male,
+          prior = prior(normal(0,0.5), class = b)+
+                  prior(normal(0, 1.5), class = Intercept)+
+                  prior(dirichlet(rep(2, 7)), class = simo, coef = "moedu.ordered1")
+          )
+```
+
+```{r}
+summary(m_4)
+```
