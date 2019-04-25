@@ -1,0 +1,95 @@
+---
+title: "Chapter15 Missing Data"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rethinking)
+data(milk)
+d <- milk
+d$neocortex.prop <- d$neocortex.perc / 100
+d$logmass <- log(d$mass)
+
+dat_list <- list(
+  K = standardize(d$kcal.per.g),
+  B = standardize(d$neocortex.prop),
+  M = standardize(d$logmass)
+)
+```
+
+### try to figure out how did <<- work and merge_missing?
+
+```{r, cache=T, message=F, results="hidden"}
+m15.5 <- ulam(
+  alist(
+    K ~ dnorm(mu, sigma),
+    mu <- a + bB * B_merge + bM * M,
+    
+    MB ~ multi_normal(c(muM, muB), Rho_BM, Sigma_BM),
+    matrix[29,2]: MB <<- append_col(M, B_merge),
+    
+    vector[29]: B_merge <- merge_missing(B, B_impute),
+    
+    c(a, muM, muB) ~ dnorm(0, 0.5),
+    c(bB, bM) ~ dnorm(0, 0.5),
+    sigma ~ dexp(1),
+    Rho_BM ~ lkj_corr(2),
+    Sigma_BM ~ dexp(1)
+  ),
+  data = dat_list, chains = 4, cores = 4
+)
+```
+```{r}
+precis(m15.5, depth = 3, pars = c("bM", "bB", "Rho_BM"))
+```
+
+```{r}
+stancode(m15.5)
+```
+### Switch to brms model
+```{r}
+library(brms)
+```
+```{r}
+str(dat_list)
+```
+
+
+```{r}
+
+b_model <- 
+  # here's the primary `kcal` model
+  bf(K ~ 1 + mi(B) + M) + 
+  # here's the model for the missing `neocortex` data 
+  bf(B | mi() ~ 1 + M) + 
+  # here we set the residual correlations for the two models to zero
+  set_rescor(FALSE)
+
+```
+
+```{r, cache=T, results="hidden"}
+b15.5 <- 
+  brm(data = dat_list, 
+      family = gaussian,
+      b_model,
+      prior = c(prior(normal(0, 0.5), class = Intercept, resp = K),
+                prior(normal(0, 0.5), class = Intercept, resp = B),
+                prior(normal(0, 0.5),  class = b),
+                prior(exponential(1),   class = sigma,     resp = K),
+                prior(exponential(1),   class = sigma,     resp = B))
+      )
+```
+```{r}
+library(tidyverse)
+library(broom)
+```
+```{r}
+tidy(b15.5) %>% 
+  mutate_if(is.numeric, round, 2)
+```
+```{r}
+precis(m15.5)
+```
+
