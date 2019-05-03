@@ -1,0 +1,87 @@
+---
+title: "covariance"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+options(mc.cores = parallel::detectCores())
+```
+
+### Data Simulation
+a simple confounding factor
+```{r dgp}
+N <- 1000
+U <- rnorm(N)
+X <- U*0.8 + rnorm(N)
+Y <- X*1.2 + U * 0.5 + rnorm(N) 
+```
+
+### Goal
+the goal is to compare 1) a multiple regression model and 2) a covariance model and see if covariance can substitute the unknown variable 
+
+```{r multiple-regression}
+# simple multiple regression should recover the parameter of 1.2
+lm(Y~X+U) %>% summary # Umm... close
+```
+```{r covariance}
+cov(X, Y)
+```
+```{r model without covariance, results = "hidden", cache=TRUE}
+m1 <- ulam(
+  alist(
+    Y ~ dnorm(mu, sigma),
+    mu <- X * b,
+    sigma ~ dexp(1),
+    b ~ dnorm(1, 1)
+  ),
+  data = list(X = X, Y = Y), cores = 4, chains = 4
+)
+```
+```{r result of simple}
+precis(m1)
+```
+
+```{r model with covariance, results="hidden", cache=TRUE}
+m2 <- ulam(
+  alist(
+    c(X,Y) ~ multi_normal(c(muX, muY), Rho, Sigma),
+    muY <- aY + bXY * X,
+    Rho ~ lkj_corr(2),
+    Sigma ~ exponential(1),
+    aY~dnorm(0,0.2),
+    bXY ~dnorm(0,0.5),
+    vector[1000]:muX ~ dnorm(0, 0.2)
+  ),
+  data = list(X = X, Y = Y), cores = 4, chains = 4
+)
+```
+```{r}
+precis(m2, depth = 3)
+```
+the result showed the bXY to be 0.67 [-0.04, 1.29] weaker than the real figure of 1.2 and have uncertain sign. given the muX was modeled, it must have eaten up lots of variability of Y.  
+
+```{r model with covariance2, results="hidden", cache=TRUE}
+m3 <- ulam(
+  alist(
+    c(X,Y) ~ multi_normal(c(X, muY), Rho, Sigma),
+    muY <- aY + bXY * X,
+    Rho ~ lkj_corr(2),
+    Sigma ~ exponential(1),
+    aY~dnorm(0,0.2),
+    bXY ~dnorm(0,0.5)
+  ),
+  data = list(X = X, Y = Y), cores = 4, chains = 4
+)
+```
+
+```{r}
+precis(m3, depth = 3)
+```
+Well this seems to be entirely off the mark too. bXY was estimated between [1.40, 1.45], actually the same as a naive linear regression - but this ran for more than 20 minutes! Surely the covariance modelling cannot produce miracles
+```{r}
+lm(Y ~ X) %>% summary()
+```
+

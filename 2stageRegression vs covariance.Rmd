@@ -1,0 +1,107 @@
+---
+title: "2stageRegression vs covariance"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+options(mc.cores = parallel::detectCores())
+```
+
+### Data Simulation
+Instrumental variable example
+```{r dgp}
+set.seed(73)
+N <- 500
+
+U_sim <- rnorm( N )
+Q_sim <- sample( 1:4 , size=N , replace=TRUE )
+E_sim <- rnorm( N , U_sim + Q_sim )
+W_sim <- rnorm( N , U_sim + 0*E_sim )
+dat_sim <- list(
+  W=standardize(W_sim) ,
+  E=standardize(E_sim) ,
+  Q=standardize(Q_sim) )
+```
+
+ 
+
+```{r naive-regression, results="hidden", cache=TRUE}
+m14.4 <- ulam( 
+  alist(
+    W ~ dnorm( mu , sigma ),
+    mu <- aW + bEW*E,
+    aW ~ dnorm( 0 , 0.2 ),
+    bEW ~ dnorm( 0 , 0.5 ),
+    sigma ~ dexp( 1 )
+    ) , data=dat_sim , chains=4 , cores=4 )
+precis( m14.4 )
+```
+```{r covariance}
+with(dat_sim, cov(E, W)) 
+lm(W ~ E, data = dat_sim) %>% summary()
+
+```
+```{r model with covariance, results = "hidden", cache=TRUE}
+mCov <- ulam(
+  alist(
+    c(W,E)~multi_normal(c(muW, muE), Rho, Sigma),
+    muW <- aW + bEW * E,
+    muE <- aE + bQE * Q,
+    Sigma ~ dexp(1),
+    Rho ~ lkj_corr(2),
+    c(aW, aE) ~ dnorm(0,0.2),
+    c(bEW, bQE) ~ dnorm(0,0.5)
+  ),
+  data = dat_sim, cores = 4, chains = 4
+)
+precis(mCov, depth = 3)
+```
+
+
+```{r 2 stage regression, results = "hidden", cache=TRUE}
+m2 <- ulam(
+  alist(
+    W ~ dnorm(muW, sigmaW),
+    muW <-  bmuEW * muE + aW,
+    E ~ dnorm(muE, sigmaE),
+    muE <- aE + bQE * Q,
+    c(aW, aE) ~ dnorm(0,0.2),
+    c(bmuEW, bQE) ~ dnorm(0, 0.5),
+    c(sigmaW, sigmaE) ~ dexp(1)
+  ),
+  data = dat_sim, cores = 4, chains = 4
+)
+
+```
+```{r}
+precis(m2)
+```
+Surely we reached the same conclusion as the covariance model - bmuEW supposed to be equavilent to bEW in the previous model. What about the case where bQE is small? which model would outperform? mCov or m2?
+
+```{r new_sim data where IV impact on exposure is small}
+set.seed(73)
+N <- 500
+
+U_sim <- rnorm( N )
+Q_sim <- sample( 1:4 , size=N , replace=TRUE )
+E_sim <- rnorm( N , U_sim + 0.1 * Q_sim )
+W_sim <- rnorm( N , U_sim + 0*E_sim )
+dat_sim2 <- list(
+  W=standardize(W_sim) ,
+  E=standardize(E_sim) ,
+  Q=standardize(Q_sim) )
+```
+
+```{r}
+mCov_x <- ulam(mCov, data = dat_sim2, chains = 4, cores = 4)
+m2_x <- ulam(m2, data = dat_sim2, chains = 4, cores = 4)
+```
+
+```{r}
+precis(mCov_x)
+precis(m2_x)
+```
+
